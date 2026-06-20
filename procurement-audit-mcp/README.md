@@ -147,9 +147,9 @@ python3 seed_procurement_data.py
 
 ---
 
-## 6. Nebula-Gate 商业化独立部署与变现前景 💎
+## 6. TuGraph-Gate 商业化独立部署与变现前景 💎
 
-这 12 个 Tools 组成的 MCP 服务端并不局限于某一个项目，其底座设计具有极强的通用性，可作为独立的 AI 数据库安全网关产品（**Nebula-Gate**）进行变现：
+这 12 个 Tools 组成的 MCP 服务端并不局限于某一个项目，其底座设计具有极强的通用性，可作为独立的 AI 数据库安全网关产品（**TuGraph-Gate**）进行变现：
 
 ### 6.1 核心商业卖点 (Value Proposition)
 1. **数据库物理防火墙**：在大模型与物理数据库（SQL / Cypher）之间拉起安全阻断网，拦截所有 DDL/DML 越权写入，防范大模型失控或 Prompt 注入。

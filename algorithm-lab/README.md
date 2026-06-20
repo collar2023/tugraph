@@ -1,4 +1,4 @@
-# 🧪 Nebula-Intelligence 算法交互实验室 (Algorithm Lab)
+# 🧪 TuGraph-Intelligence 算法交互实验室 (Algorithm Lab)
 
 本目录由 **“实验室全自动管理器 (Lab-Orchestrator)”** 统一管理，支持跨领域关联演算。
 
@@ -27,7 +27,7 @@ python3 lab_manager.py
 
 ## 🛠️ 环境依赖
 本目录已配置统一的 `package.json` 依赖，供所有子场景共享：
-- **`nebula-nodejs`**: 基础连接。
+- **`TuGraph-nodejs`**: 基础连接。
 - **`langgraph`**: 状态机编排。
 
 ---

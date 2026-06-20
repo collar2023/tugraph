@@ -1,6 +1,6 @@
 # Fraud-Agent: 基于 TuGraph 的极简直连反欺诈智能体 (v3.5)
 
-本项目是部署于 **Oracle ARM** 环境下的轻量级反欺诈研判智能体。项目已全面升级为**直连主方案架构（Lean GraphRAG Architecture）**，彻底废除了重型 Java 语义服务（OpenSPG）与 NebulaGraph 容器集群，仅以单个 **TuGraph** 容器作为图存储，配合 Python 内存 DFS 进行深度团伙排查。
+本项目是部署于 **Oracle ARM** 环境下的轻量级反欺诈研判智能体。项目已全面升级为**直连主方案架构（Lean GraphRAG Architecture）**，彻底废除了重型 Java 语义服务（OpenSPG）与 TuGraph 容器集群，仅以单个 **TuGraph** 容器作为图存储，配合 Python 内存 DFS 进行深度团伙排查。
 
 ---
 

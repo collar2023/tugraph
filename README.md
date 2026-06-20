@@ -1,6 +1,6 @@
 # TuGraph-Intelligence: 极简直连 GraphRAG 智能体平台 (v3.6)
 
-本平台是部署于 **Oracle ARM (4C/24G)** 环境下的多业务自主风控研判系统。平台已全面升级为**直连主方案架构（Lean GraphRAG Architecture）**，废除了重型 Java 语义服务（OpenSPG）、MariaDB 关系库与 10 容器的 NebulaGraph 集群，仅保留轻量级国产图数据库（**TuGraph**）与向量检索库（**Qdrant**）。
+本平台是部署于 **Oracle ARM (4C/24G)** 环境下的多业务自主风控研判系统。平台已全面升级为**直连主方案架构（Lean GraphRAG Architecture）**，废除了重型 Java 语义服务（OpenSPG）、MariaDB 关系库与 10 容器的 TuGraph 集群，仅保留轻量级国产图数据库（**TuGraph**）与向量检索库（**Qdrant**）。
 
 整个系统运行常驻内存大幅压缩至 **2GB-4GB**，开发与运维效率获得数量级提升。
 
@@ -67,9 +67,9 @@
 
 ---
 
-## 1. 核心底座：大模型数据库安全网关 (Nebula-Gate) 🛡️
+## 1. 核心底座：大模型数据库安全网关 (TuGraph-Gate) 🛡️
 
-本平台最具商业价值的底层核心是一个名为 **Nebula-Gate** 的 MCP 服务端。它直接将 TuGraph 与 Qdrant 的底层操作封装为大模型可调用的标准化工具组，彻底解耦了业务智能体与物理数据库的直连代码，并实现了严密的安全管控。
+本平台最具商业价值的底层核心是一个名为 **TuGraph-Gate** 的 MCP 服务端。它直接将 TuGraph 与 Qdrant 的底层操作封装为大模型可调用的标准化工具组，彻底解耦了业务智能体与物理数据库的直连代码，并实现了严密的安全管控。
 
 ### 1.1 注册工具组清单 (12 Core Tools) ⚙️
 服务端向大模型暴露了以下 12 个即插即用的核心工具，覆盖数据勘探、本体建模、安全查询、审计留痕以及人机协同（HITL）全生命周期：
