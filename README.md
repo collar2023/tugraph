@@ -67,21 +67,62 @@
 
 ---
 
-## 1. 极简平台架构 (Platform Architecture) 🏗️
+## 1. 核心底座：大模型数据库安全网关 (Nebula-Gate) 🛡️
+
+本平台最具商业价值的底层核心是一个名为 **Nebula-Gate** 的 MCP 服务端。它直接将 TuGraph 与 Qdrant 的底层操作封装为大模型可调用的标准化工具组，彻底解耦了业务智能体与物理数据库的直连代码，并实现了严密的安全管控。
+
+### 1.1 注册工具组清单 (12 Core Tools) ⚙️
+服务端向大模型暴露了以下 12 个即插即用的核心工具，覆盖数据勘探、本体建模、安全查询、审计留痕以及人机协同（HITL）全生命周期：
+
+| 工具名称 | 分组 | 危险级别 | 功能说明 |
+| :--- | :--- | :--- | :--- |
+| `get_raw_data_sample` | 数据探索 | `safe` | 读取本地原始样本数据，供大模型逆向建模学习 |
+| `get_graph_schema` | 本体建模 | `safe` | 获取 TuGraph 当前已有的点边标签及属性定义 |
+| `create_graph_label` | 本体建模 | `caution` | 动态修改图谱 Schema，向图数据库注入新的点/边 Label |
+| `execute_cypher` | 图谱演算 | `caution` | 直连图库运行纯读 Cypher，内置关键字拦截与强制 LIMIT 限制 |
+| `bulk_insert_relationships`| 自动建图 | `danger` | 大模型提取三元组后，批量幂等灌入底层关系网络 |
+| `search_vector_news` | 向量研判 | `safe` | 直连 Qdrant 检索企业风险舆情，实现图+向量双驱研判 |
+| `list_tools`, `describe_tool`| 元数据 | `safe` | 查询本服务所有可用 tool 的详细参数契约与危险等级 |
+| `query_audit_actions` | 审计留痕 | `safe` | 查询最近 N 条图谱写入的审计溯源操作记录 |
+| `flag_for_review` | 人机协同 | `caution` | 将执行失败/低置信度的操作标为待人工审核，生成 Pending 节点 |
+| `list_pending_reviews` | 人机协同 | `safe` | 列出待人工审批的图谱写入任务 |
+| `manual_commit` | 人机协同 | `danger` | 审核员对挂起状态做决策 (Approve / Reject / Override 强灌) |
+
+### 1.2 五步自进化 SOP (5-Step Ontology Evolution) 🔄
+这 12 个工具配合大模型，形成了一套坚不可摧的“**五步图谱生成与写入 SOP**”：
+1. **数据探针与特征识别 (Inspection)**：调用 `get_raw_data_sample` 读取原始业务报表，分析列名与数据特征。
+2. **本体推理 (Ontology Reasoning)**：LLM 结合业务目标进行语义推理，自动推导图谱本体（应建哪些点、哪些边）。
+3. **Schema 动态注入 (Seeding)**：调用 `create_graph_label` 自动执行图谱 Schema 结构注册。
+4. **状态反馈与对齐 (Verification)**：调用 `get_graph_schema` 获取最新的物理结构，确保结构与业务对齐，再生成标准 JSON 三元组进行安全的 `bulk_insert`。
+5. **鲁棒性护栏 (HITL)**：整个生命周期处于严格监控中。如遇低置信度数据，模型主动调用 `flag_for_review` 拦截写入，等待人类审核员确认后才由 `manual_commit` 最终落盘。
+
+---
+
+## 2. 数据的异步有效轮转与闭环治理 (Asynchronous Reliable Data Flow) 🗺️
+
+本架构构建了基于 Cloudflare Edge 与本地专属隧道隔离的异步闭环体系，极大地提升了系统的**抗突发流量能力**与**容灾鲁棒性**：
 
 ```mermaid
 graph TD
-    UserQuery[1. 用户自然语言问句] --> IntentNode[2. LLM 意图识别 & 实体提取]
-    IntentNode --> CleanNode[3. 正则清洗器: 过滤 think 思考痕迹]
-    CleanNode --> CypherGen[4. Cypher 语句生成 / 模板化检索]
-    CypherGen --> ExecNode[5. TuGraph Bolt 直连执行]
-    ExecNode --> MemoryDFS[6. Python 内存图计算: DFS 路径恢复与环路检测]
-    MemoryDFS --> RAGNode[7. LLM 研判融合生成最终中文报告]
+    UI[浏览器前端 fder.188001.xyz] -->|POST /upload| Worker[CF Worker]
+    Worker -->|存储原件| R2[(Cloudflare R2 暂存)]
+    Worker -->|生产任务| Queue[Cloudflare Queue 排队削峰]
+    Queue -->|异步消费| Consumer[Queue Consumer]
+    Consumer -.->|HTTP 502/网络故障| Queue
+    Consumer -->|携带安全密钥| Tunnel[Cloudflared 加密隧道]
+    Tunnel -->|转发 127.0.0.1:5000| Proxy[本地 MCP FastAPI 代理]
+    Proxy -->|工具执行与拦截| TuGraph[(TuGraph / Qdrant 底层入库)]
+    Proxy -->|Callback 回写状态| Worker
+    Worker -->|写入 KV| KV[(Cloudflare KV 任务墙)]
+    Worker -->|POST /notify| DO[TaskCoordinator DO]
+    DO -->|WebSocket 广播 task_updated| UI
 ```
 
-### 1.1 双驱底座配置
-*   **图数据库 (TuGraph)**: 存储实体拓扑网络，处理多步拓扑路径与持股事实。访问地址：`bolt://localhost:7687` (DB: `default`)。
-*   **向量检索库 (Qdrant)**: 负责模糊实体链接与非结构化知识（如舆情、政策文书）检索。访问地址：`http://localhost:6333`。
+### 核心稳固机制：
+1. **“削峰填谷”绝对安全**：前端瞬间涌入千万级合同，系统绝不会打宕本地图数据库。请求被 R2 与 Queue 平滑吸收，按设定速率稳定消费。
+2. **“断线重试”机制**：本地网络波动、宕机重启（如抛出 500/502 错误）不会丢失数据。队列消费者会触发 `msg.retry()` 退避重试，一旦本地网络恢复，任务继续流转。
+3. **“推拉结合”的零轮询反馈**：写入完成后状态进入 Cloudflare KV，再通过 Durable Objects (DO) 瞬间多播触发 WebSocket 事件。浏览器 UI 无论何时刷新，都能立即对齐最新的异步状态，实现了端到端的完美闭环。
+
 
 ---
 
@@ -140,40 +181,7 @@ python3 /home/ubuntu/tugraph/algorithm-lab/demo_shareholding.py
 
 ---
 
-## 5. 异步数据录入与实时审计反馈架构 🗺️
 
-> **🏆 2026-06-20 重大里程碑**：全链路闭环 + Durable Objects WebSocket 实时推送已全部验证上线（`fder.188001.xyz`）。
-
-平台构建了**基于 Cloudflare Edge 与本地专属隧道双向隔离的异步闭环体系**，并通过 **Durable Objects** 实现零轮询的实时状态同步：
-
-```
-[浏览器 fder.188001.xyz]
-     │  WebSocket wss://fder.188001.xyz/api/ws
-     │◄────────────────────────────────────────┐
-     │                                         │
-     │ POST /api/upload           [TaskCoordinator DO]
-     ▼                                         │ broadcast task_updated
-[CF Worker]──R2 暂存──►[CF Queue]  POST /notify ──┘
-     │                     │          ▲
-     │ 初始化 KV queued     │       setTaskStatus()
-     ▼                     ▼          │
-[CF KV 状态库]      [Queue Consumer]───┘
-     ▲                     │
-     │ Callback completed  ▼
-     └────────────[本地 VPS :5000 FastAPI]
-                          │
-                    (双引擎灌入)
-                    ▼         ▼
-               [Qdrant]   [TuGraph]
-```
-
-1.  **统一入口 (`fder.188001.xyz`)**: CF Worker 托管前端 Dashboard + 提供全部 API 端点，域名已自定义绑定。
-2.  **Cloudflare Queue 异步流控**: 文件解析任务通过边缘队列排队，支持自动错误重试与并发限制，防爆削峰。
-3.  **Durable Objects 实时推送 (v0.3)**: `TaskCoordinator` DO 维护所有在线 WebSocket 会话池。每次 `setTaskStatus()` 写 KV 后同步向 DO 发送 `POST /notify`，DO 将 `{type: "task_updated", task}` 广播至全部活跃会话。**零轮询，推送延迟 < 100ms**。
-4.  **5% 兜底与 HITL 协同**: `pending_manual_review` 状态由前端 HITL 面板接管，提供 approve / reject / override 三按钮极简操作，override 数据复用 MERGE + 幂等机制写回 TuGraph / Qdrant 并全程留 AuditAction 审计边。
-
-> 详细设计请参阅白皮书（第 7、8 节已更新为 DO WebSocket 现状）：
-> 👉 [Lean GraphRAG 异步数据摄取与合同审计架构白皮书](file:///home/ubuntu/tugraph/docs/whitepaper_async_ingest.md)
 
 ---
 
