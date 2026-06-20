@@ -88,13 +88,18 @@
 | `list_pending_reviews` | 人机协同 | `safe` | 列出待人工审批的图谱写入任务 |
 | `manual_commit` | 人机协同 | `danger` | 审核员对挂起状态做决策 (Approve / Reject / Override 强灌) |
 
-### 1.2 五步自进化 SOP (5-Step Ontology Evolution) 🔄
-这 12 个工具配合大模型，形成了一套坚不可摧的“**五步图谱生成与写入 SOP**”：
-1. **数据探针与特征识别 (Inspection)**：调用 `get_raw_data_sample` 读取原始业务报表，分析列名与数据特征。
-2. **本体推理 (Ontology Reasoning)**：LLM 结合业务目标进行语义推理，自动推导图谱本体（应建哪些点、哪些边）。
-3. **Schema 动态注入 (Seeding)**：调用 `create_graph_label` 自动执行图谱 Schema 结构注册。
-4. **状态反馈与对齐 (Verification)**：调用 `get_graph_schema` 获取最新的物理结构，确保结构与业务对齐，再生成标准 JSON 三元组进行安全的 `bulk_insert`。
-5. **鲁棒性护栏 (HITL)**：整个生命周期处于严格监控中。如遇低置信度数据，模型主动调用 `flag_for_review` 拦截写入，等待人类审核员确认后才由 `manual_commit` 最终落盘。
+### 1.2 预建骨干与五步自进化 SOP (Schema Governance & Evolution) 🔄
+这 12 个工具配合大模型，形成了一套“**既有法治、又有自治**”的图谱生成与写入标准作业流程（SOP）：
+
+**【开端】第 0 步：人工预建骨干表 (Ontology Seeding)**
+系统上线前的**绝对前提**。架构师通过脚本（如 `seed_*.py`）预先在 TuGraph 中强制建立最核心的骨干表（如 `Corp`, `Person`, `Contract`）与硬性业务属性（如持股比例 `share`）。这为大模型定下了不可逾越的**“死规矩”**，彻底阻断了“本体无序膨胀”与“造词幻觉”，保障底层硬核算法（如 UBO 乘积运算）绝不会因为节点结构变化而跑崩。
+
+**【自进化】第 1~5 步：大模型面对未知长尾数据的动态适配**
+1. **数据探针与特征识别 (Inspection)**：调用 `get_raw_data_sample` 读取未知的原始业务报表，分析列名与数据特征。
+2. **本体推理 (Ontology Reasoning)**：LLM 结合业务目标进行语义推理，自动推导周边新增图谱本体（如《高管配偶表》中的 `Spouse`）。
+3. **Schema 动态注入 (Seeding)**：调用 `create_graph_label` 自动执行图谱 Schema 结构扩展注册。
+4. **状态反馈与对齐查重 (Verification)**：调用 `get_graph_schema` 获取最新的物理结构。**此时大模型必须将抽取到的实体对齐到第 0 步预建的核心骨干表上**（防重叠），再生成标准 JSON 三元组进行安全的 `bulk_insert`。
+5. **鲁棒性护栏 (HITL)**：整个生命周期处于严格监控中。如遇低置信度数据或危险 Schema 修改，模型主动调用 `flag_for_review` 拦截，等待人类审核员确认后才由 `manual_commit` 最终落盘。
 
 ---
 
