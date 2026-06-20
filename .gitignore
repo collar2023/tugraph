@@ -12,3 +12,4 @@ venv/
 scratch/
 node_modules/
 .wrangler/
+logs/
