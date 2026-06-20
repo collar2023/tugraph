@@ -1,0 +1,6 @@
+contract_id,title,supplier_name,amount,payment_terms,approver_name
+CT-2026-001,原材料钢材采购合同,Moore-Kim,5000000.0,首付30%，尾款验收后支付,Jasmine Bell
+CT-2026-002,行政办公用品采购协议,"Bean, Jones and Benton",150000.0,验收合格后一次性付清,Laura Clark
+CT-2026-003,服务器托管运维合同,Ortega-Hoffman,1200000.0,按季度预付,Kathryn Chavez
+CT-2026-004,物流仓储外包协议,"Smith, Dawson and Williams",850000.0,月度结算,Miguel Turner
+CT-2026-005,芯片测试设备购买合同,Hicks PLC,12000000.0,首付80%（违规比例），发货前支付20%,Christine Lee

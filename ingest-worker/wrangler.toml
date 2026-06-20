@@ -1,0 +1,57 @@
+name = "ingest-worker"
+main = "src/index.js"
+compatibility_date = "2026-06-20"
+compatibility_flags = ["nodejs_compat"]
+
+workers_dev = true
+
+routes = [
+  { pattern = "fder.188001.xyz", custom_domain = true }
+]
+
+# 不需要 static assets（我们纯 JS）
+# assets = { directory = "./public", binding = "ASSETS" }  # 注释掉
+
+# ============================
+# 4 个 binding
+# ============================
+
+# 1. R2 桶（文件暂存）
+[[r2_buckets]]
+binding = "CONTRACTS"
+bucket_name = "procurement-contracts"
+preview_bucket_name = "procurement-contracts-preview"
+
+# 2. Queue producer
+[[queues.producers]]
+queue = "ingest-tasks"
+binding = "TASK_QUEUE"
+
+# 3. Queue consumer (Worker 反向消费这个 queue)
+[[queues.consumers]]
+queue = "ingest-tasks"
+max_batch_size = 5
+max_batch_timeout = 30
+
+# 4. KV 命名空间（任务状态）
+[[kv_namespaces]]
+binding = "TASK_STATUS"
+id = "e5b060080e214823bfb835c749300be0"
+preview_id = "e5b060080e214823bfb835c749300be0"
+
+# 5. Durable Object Binding
+[[durable_objects.bindings]]
+name = "TASK_COORDINATOR"
+class_name = "TaskCoordinator"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["TaskCoordinator"]
+
+# ============================
+# 环境变量
+# ============================
+[vars]
+BACKEND_URL = "https://fde.188001.xyz"   # 本地后端（cloudflared 已 tunnel 通）
+BACKEND_SECRET_HEADER = "X-Harness-Secret"
+HARNESS_SECRET = "YOUR_HARNESS_SECRET"  # 同步后端 env（阶段 2 调本地用）

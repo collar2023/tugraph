@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nebula-Intelligence · Audit & HITL Demo</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  pre { white-space: pre-wrap; word-break: break-all; }
+  .card { transition: all .15s; }
+  .card:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.08); }
+  .badge-pending { background:#fef3c7; color:#92400e; }
+  .badge-approved { background:#d1fae5; color:#065f46; }
+  .badge-rejected { background:#fee2e2; color:#991b1b; }
+  .badge-ok { background:#d1fae5; color:#065f46; }
+  .badge-err { background:#fee2e2; color:#991b1b; }
+  .spinner { display:inline-block; width:14px; height:14px; border:2px solid #e5e7eb; border-top-color:#3b82f6; border-radius:50%; animation:spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<header class="bg-white border-b border-slate-200">
+  <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+    <div>
+      <h1 class="text-xl font-bold text-slate-900">🛡️ Nebula-Intelligence · Audit & HITL</h1>
+      <p class="text-xs text-slate-500 mt-1">企业 AI 治理闭环演示 · MCP 12 tools · 端到端留痕</p>
+    </div>
+    <div class="flex items-center gap-3 text-xs">
+      <span id="conn-status" class="px-2 py-1 rounded bg-slate-100 text-slate-600">
+        <span class="spinner"></span> 连接中…
+      </span>
+      <span class="text-slate-500">session: <code id="session-id" class="bg-slate-100 px-1 rounded">—</code></span>
+      <button onclick="refreshAll()" class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">↻ 刷新</button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-6 py-6 space-y-6">
+
+  <!-- 一键造异常 case -->
+  <section class="bg-white rounded-lg border border-slate-200 p-5">
+    <h2 class="text-sm font-semibold text-slate-700 mb-3">1. 制造异常 case (触发 HITL)</h2>
+    <p class="text-xs text-slate-500 mb-3">点下面任一按钮会调用 MCP tool 并自动 flag_for_review。</p>
+    <div class="flex flex-wrap gap-2">
+      <button onclick="triggerCase('cypher_zero')" class="px-3 py-2 bg-amber-500 text-white text-xs rounded hover:bg-amber-600">
+        🔍 查询不存在的公司 (low_confidence)
+      </button>
+      <button onclick="triggerCase('cypher_blocked')" class="px-3 py-2 bg-amber-500 text-white text-xs rounded hover:bg-amber-600">
+        🚫 写非法 DELETE Cypher (cypher_failed)
+      </button>
+      <button onclick="triggerCase('bulk_zero')" class="px-3 py-2 bg-amber-500 text-white text-xs rounded hover:bg-amber-600">
+        📦 灌入指向不存在节点的边 (entity_conflict)
+      </button>
+    </div>
+    <p class="text-xs text-slate-400 mt-2">每次触发后会自动出现在下方"待审核"列表。</p>
+  </section>
+
+  <!-- 待审核列表 -->
+  <section class="bg-white rounded-lg border border-slate-200 p-5">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-sm font-semibold text-slate-700">2. 待人工审核 (PendingReview)</h2>
+      <div class="flex gap-2 text-xs">
+        <button onclick="loadPending('pending')" class="px-2 py-1 bg-slate-100 text-slate-700 rounded hover:bg-slate-200">pending</button>
+        <button onclick="loadPending('all')" class="px-2 py-1 bg-slate-100 text-slate-700 rounded hover:bg-slate-200">all</button>
+      </div>
+    </div>
+    <div id="pending-list" class="space-y-3 text-sm">
+      <p class="text-xs text-slate-400">加载中…</p>
+    </div>
+  </section>
+
+  <!-- 审计日志 -->
+  <section class="bg-white rounded-lg border border-slate-200 p-5">
+    <h2 class="text-sm font-semibold text-slate-700 mb-3">3. 审计日志 (AuditAction + Ref) — 最近 30 条</h2>
+    <div id="audit-list" class="space-y-2 text-xs font-mono">
+      <p class="text-slate-400">加载中…</p>
+    </div>
+  </section>
+
+  <!-- 治理闭环说明 -->
+  <section class="bg-slate-100 rounded-lg p-5 text-xs text-slate-600 leading-relaxed">
+    <h3 class="font-semibold text-slate-800 mb-2">治理闭环示意</h3>
+    <pre class="text-[11px]">
+业务调用 → execute_cypher / bulk_insert
+   ↓ (audit 自动写 AuditAction + AuditRef)
+   ↓ (异常检测：0 行 / 抛错 / 边约束不符)
+   ↓
+flag_for_review → 创建 PendingReview + TRIGGERED 边
+   ↓
+审核员 (本页 3 按钮)：
+   ├─ approve  → 接受原结果（仅写 HumanDecision）
+   ├─ reject   → 拒绝（状态置为 rejected）
+   └─ override → 用修正数据走 bulk_insert 的 MERGE 灌入（写 audit: manual_commit）
+    </pre>
+  </section>
+</main>
+
+<script>
+const API = "http://" + location.hostname + ":5000";
+
+async function callTool(name, args) {
+  const r = await fetch(API + "/mcp/call", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, arguments: args || {} }),
+  });
+  return r.json();
+}
+
+async function refreshAll() {
+  await Promise.all([loadPending('pending'), loadAudit(), checkConn()]);
+}
+
+async function checkConn() {
+  try {
+    const r = await fetch(API + "/healthz");
+    const d = await r.json();
+    document.getElementById("conn-status").innerHTML = d.ok
+      ? '<span class="text-green-600">● MCP OK</span> <span class="text-slate-400 ml-1">pid=' + d.mcp_pid + "</span>"
+      : '<span class="text-red-600">● MCP DOWN</span>';
+  } catch (e) {
+    document.getElementById("conn-status").innerHTML = '<span class="text-red-600">● 代理不可达</span>';
+  }
+}
+
+// ===== 触发异常 case =====
+async function triggerCase(kind) {
+  let actionId = null;
+  if (kind === "cypher_zero") {
+    const r = await callTool("execute_cypher", {
+      query: "MATCH (c:Corp {name: 'ZZZ_DemoDoesNotExist'})<-[:hold_share*0..3]-(s) RETURN s.name, c.name LIMIT 5"
+    });
+    if (r.ok && r.result && r.result.count === 0) {
+      // 拿刚写的 action_id
+      const audit = await callTool("query_audit_actions", { limit: 1 });
+      actionId = audit.result.actions[0].aid;
+      await callTool("flag_for_review", { action_id: actionId, reason: "low_confidence", note: "0 行结果，建议人工核查公司名" });
+    } else if (r.ok) {
+      alert("意外：返回了 " + r.result.count + " 行，请换其他按钮测试");
+      return;
+    }
+  } else if (kind === "cypher_blocked") {
+    const r = await callTool("execute_cypher", { query: "MATCH (a:Applicant) DELETE a" });
+    if (r.ok && r.result.refused) {
+      const audit = await callTool("query_audit_actions", { limit: 1 });
+      actionId = audit.result.actions[0].aid;
+      await callTool("flag_for_review", { action_id: actionId, reason: "cypher_failed", note: "LLM 写出 DELETE，被护栏拦截" });
+    }
+  } else if (kind === "bulk_zero") {
+    const r = await callTool("bulk_insert_relationships", {
+      relationships_json: JSON.stringify([{
+        src_id: "p_NOTEXIST", src_label: "Person",
+        dst_id: "c_NOTEXIST", dst_label: "Corp",
+        relation: "hold_share", properties: {}
+      }]),
+      idempotency_key: "demo-zero-" + Date.now(),
+    });
+    if (r.ok && r.result.success_count === 0) {
+      const audit = await callTool("query_audit_actions", { limit: 1 });
+      actionId = audit.result.actions[0].aid;
+      await callTool("flag_for_review", { action_id: actionId, reason: "entity_conflict", note: "源/终节点都不存在" });
+    }
+  }
+  await refreshAll();
+}
+
+// ===== 加载待审核 =====
+async function loadPending(status) {
+  const el = document.getElementById("pending-list");
+  el.innerHTML = '<p class="text-xs text-slate-400">加载中…</p>';
+  const r = await callTool("list_pending_reviews", { status_filter: status });
+  if (!r.ok) { el.innerHTML = '<p class="text-red-600">' + r.error + '</p>'; return; }
+  const reviews = r.result.reviews || [];
+  if (r.result.session_id) document.getElementById("session-id").textContent = r.result.session_id;
+  if (reviews.length === 0) {
+    el.innerHTML = '<p class="text-xs text-slate-400">无待审核 review · 试试上面的"制造异常 case"按钮</p>';
+    return;
+  }
+  el.innerHTML = reviews.map(rv => {
+    const badge = "status-" + rv.status;
+    const dec = rv.decision;
+    return `
+    <div class="card border border-slate-200 rounded p-3">
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+          <span class="px-2 py-0.5 text-[10px] font-mono rounded ${badge}">${rv.status.toUpperCase()}</span>
+          <span class="text-xs font-mono text-slate-500">${rv.rid}</span>
+          <span class="text-xs text-slate-400">reason=${rv.reason}</span>
+        </div>
+        <span class="text-[10px] text-slate-400">${rv.created}</span>
+      </div>
+      <div class="text-xs text-slate-600 mb-2">
+        <span class="text-slate-400">触发 action:</span> <code class="bg-slate-100 px-1 rounded">${rv.aid}</code>
+        ${rv.rk ? `<span class="ml-2 text-slate-400">${rv.rk}=</span><code class="bg-slate-100 px-1 rounded">${escapeHtml((rv.rv || "").slice(0, 80))}</code>` : ''}
+      </div>
+      ${dec ? `
+        <div class="text-xs text-slate-500 mb-2 pl-2 border-l-2 border-green-300">
+          ✓ 已决定: <b>${dec.outcome}</b> by <code>${dec.by_}</code> at ${dec.at}<br>
+          <span class="text-slate-400">${dec.note || ''}</span>
+        </div>` : `
+        <div class="flex gap-2 mt-2">
+          <button onclick="commit('${rv.rid}', 'approve', '')" class="px-3 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600">✓ 接受原结果</button>
+          <button onclick="commit('${rv.rid}', 'reject', '客户名拼写错误，参考审计建议')" class="px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600">✗ 拒绝</button>
+          <button onclick="commitOverride('${rv.rid}')" class="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600">📝 override + 强灌</button>
+        </div>
+      `}
+    </div>`;
+  }).join("");
+}
+
+// ===== 审核员决定 =====
+async function commit(reviewId, outcome, note) {
+  const actor = prompt("请输入审核员身份 (email):", "alice@example.com") || "demo-user";
+  const r = await callTool("manual_commit", { review_id: reviewId, outcome, note, actor });
+  if (r.ok) {
+    alert("✓ 已决定: " + outcome + "\n" + JSON.stringify(r.result, null, 2));
+    refreshAll();
+  } else {
+    alert("✗ 失败: " + r.error);
+  }
+}
+
+async function commitOverride(reviewId) {
+  const actor = prompt("请输入审核员身份 (email):", "alice@example.com") || "demo-user";
+  // 默认灌入一个 Corp -> Contract 的 sign_contract（边约束允许）
+  const payload = JSON.stringify([{
+    src_id: "c_102", src_label: "Corp",
+    dst_id: "CT-2026-001", dst_label: "Contract",
+    relation: "sign_contract", properties: {}
+  }]);
+  const r = await callTool("manual_commit", {
+    review_id: reviewId, outcome: "override",
+    note: "人工修正：补灌正确 sign_contract 边",
+    override_payload_json: payload, actor,
+  });
+  if (r.ok) {
+    alert("✓ override 完成: " + r.result.override_result.success_count + "/" + r.result.override_result.total + " 成功");
+    refreshAll();
+  } else {
+    alert("✗ 失败: " + r.error);
+  }
+}
+
+// ===== 加载审计日志 =====
+async function loadAudit() {
+  const el = document.getElementById("audit-list");
+  const r = await callTool("query_audit_actions", { limit: 30 });
+  if (!r.ok) { el.innerHTML = '<p class="text-red-600">' + r.error + '</p>'; return; }
+  const actions = r.result.actions || [];
+  if (actions.length === 0) {
+    el.innerHTML = '<p class="text-slate-400">无 audit 记录</p>';
+    return;
+  }
+  el.innerHTML = actions.map(a => {
+    const ts = a.ts ? a.ts.slice(11, 19) : "";
+    const okClass = a.ok === "true" ? "badge-ok" : "badge-err";
+    const refs = (a.refs || []).filter(x => x && x.kind).map(x => x.kind + "=" + (x.value || "").slice(0, 40)).join("; ");
+    return `
+    <div class="border-l-2 ${a.ok === 'true' ? 'border-green-300' : 'border-red-300'} pl-2 py-1">
+      <span class="text-slate-400">${ts}</span>
+      <span class="px-1.5 py-0.5 text-[10px] rounded ${okClass}">${a.ok}</span>
+      <b class="text-slate-700 ml-1">${a.tool}</b>
+      <span class="text-slate-500"> · ${a.summary || ""}</span>
+      ${refs ? `<br><span class="text-slate-400 ml-12 text-[10px]">└─ ${refs}</span>` : ''}
+    </div>`;
+  }).join("");
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+
+refreshAll();
+setInterval(refreshAll, 8000);
+</script>
+</body>
+</html>

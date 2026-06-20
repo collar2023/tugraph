@@ -1,0 +1,5 @@
+mcp
+neo4j
+qdrant-client
+pandas
+openpyxl
