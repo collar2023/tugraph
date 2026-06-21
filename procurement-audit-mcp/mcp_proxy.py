@@ -333,16 +333,76 @@ def api_process(body: dict):
     if not task_id:
         raise HTTPException(status_code=400, detail="task_id required")
 
-    # 1. 调 MCP 处理（这里 MVP 简化：调 search_vector_news 当作"内容审核"占位）
-    #    真实业务应调：read_raw_data_sample (读 CSV) / create_graph_label (建本体) 等
-    try:
-        supplier_name = os.path.splitext(filename)[0] if filename else ""
-        mcp_result = mcp.call("search_vector_news", {
-            "supplier_name": supplier_name,
-            "limit": 3,
-        })
-    except Exception as e:
-        mcp_result = {"error": f"mcp call failed: {e}"}
+    # 1. 调 MCP / 数据库 处理器
+    is_invoice_scenario = any(k in (filename or "").lower() for k in ["invoice", "recon", "payment"])
+    
+    if is_invoice_scenario:
+        try:
+            from neo4j import GraphDatabase
+            driver = GraphDatabase.driver("bolt://localhost:7687", auth=("admin", "73@TuGraph"))
+            with driver.session(database="default") as sess:
+                # 1) 超开
+                q_over = """
+                MATCH (c:Contract)-[:HAS_INVOICE]->(i:Invoice)
+                WITH c, sum(i.amount) AS total_invoiced, collect(i.invoice_code) AS invoice_list
+                WHERE total_invoiced > c.amount
+                RETURN c.contract_id AS id, total_invoiced - c.amount AS over
+                """
+                over_list = sess.run(q_over).data()
+                
+                # 2) 欠付
+                q_under = """
+                MATCH (p:Payment)-[r:MATCHED_INVOICE]->(i:Invoice)
+                WITH i, sum(r.matched_amount) AS total_paid
+                WHERE total_paid < i.amount
+                RETURN i.invoice_id AS id, i.amount - total_paid AS gap
+                """
+                under_list = sess.run(q_under).data()
+                
+                # 3) 第三方
+                q_third = """
+                MATCH (p:Payment)-[:MATCHED_INVOICE]->(i:Invoice),
+                      (p)-[:PAID_BY]->(payer:Corp),
+                      (i)-[:ISSUED_TO]->(buyer:Corp)
+                WHERE NOT (payer.corp_id = buyer.corp_id)
+                RETURN p.payment_id AS id, buyer.name AS buyer_name, payer.name AS payer_name
+                """
+                third_list = sess.run(q_third).data()
+            driver.close()
+            
+            # 拼装审计报告
+            findings = []
+            if over_list:
+                findings.append(f"🔴 高危: 合同 {over_list[0]['id']} 累计超额开票 ¥{over_list[0]['over']:,.2f}")
+            if under_list:
+                findings.append(f"🟡 中危: 发票 {under_list[0]['id']} 付款欠收缺口 ¥{under_list[0]['gap']:,.2f}")
+            if third_list:
+                findings.append(f"🔴 高危: 付款流水 {third_list[0]['id']} 存在第三方资金代付 (抬头: {third_list[0]['buyer_name']}, 付款方: {third_list[0]['payer_name']})")
+                
+            if not findings:
+                summary_text = "✅ 业财图谱比对完成：未发现合同超额开票、付款欠收或第三方代付异常。"
+            else:
+                summary_text = "❌ 业财核销图谱比对警报：\n" + "\n".join(findings)
+                
+            mcp_result = {"status": "ok", "summary": summary_text}
+        except Exception as e:
+            mcp_result = {"error": f"TuGraph audit query failed: {e}"}
+            summary_text = f"TuGraph 审计执行失败: {e}"
+    else:
+        try:
+            supplier_name = os.path.splitext(filename)[0] if filename else ""
+            mcp_result = mcp.call("search_vector_news", {
+                "supplier_name": supplier_name,
+                "limit": 3,
+            })
+            summary_text = (
+                f"matched {len(mcp_result.get('matches', []))} references"
+                if isinstance(mcp_result, dict) and "matches" in mcp_result
+                else str(mcp_result)[:200]
+            )
+        except Exception as e:
+            mcp_result = {"error": f"mcp call failed: {e}"}
+            summary_text = f"mcp call failed: {e}"
 
     # 2. 拼最终报告
     report = {
@@ -351,11 +411,7 @@ def api_process(body: dict):
         "r2_key": r2_key,
         "filename": filename,
         "content_type": content_type,
-        "mcp_result_summary": (
-            f"matched {len(mcp_result.get('matches', []))} references"
-            if isinstance(mcp_result, dict) and "matches" in mcp_result
-            else str(mcp_result)[:200]
-        ),
+        "mcp_result_summary": summary_text,
         "completed_at": __import__("datetime").datetime.now().isoformat(),
     }
 
