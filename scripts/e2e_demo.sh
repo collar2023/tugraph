@@ -9,14 +9,13 @@ CF="https://fder.188001.xyz"
 SECRET=$(grep HARNESS_SECRET ~/.secrets/backend.env 2>/dev/null | cut -d= -f2)
 SECRET=${SECRET:-"GKxfydwnbfvFKW0QVqc1d80Y7uArzBPxwYAbcSTcY-Q"}
 
-TESTFILE=/tmp/e2e_demo_$$.txt
+TESTFILE=/tmp/e2e_invoice_recon_$$
 cat > $TESTFILE << 'EOF'
-合同编号: E2E-DEMO-2026
-供应商: DemoSupplier Co. Ltd.
-金额: 99999.99
-签约日期: 2026-06-20
-审批人: E2E Tester
-备注: 端到端演示
+场景: 采购与财务发票对账审计 (Procurement & Invoice Reconciliation Audit)
+时间: 2026-06-21
+分析对象: 历史签署采购发票与银行流水的匹配关系
+比对逻辑: 校验合同金额、开票金额与付款流水的关联闭环，寻找超额开票、欠付缺口及第三方代付等合规审计漏洞。
+状态: 测试数据体检与自动风控流程触发
 EOF
 
 echo "╔══════════════════════════════════════════════════════╗"
