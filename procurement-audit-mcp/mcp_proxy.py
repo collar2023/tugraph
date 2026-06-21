@@ -373,21 +373,44 @@ def api_process(body: dict):
             # 拼装审计报告
             findings = []
             if over_list:
-                findings.append(f"🔴 高危: 合同 {over_list[0]['id']} 累计超额开票 ¥{over_list[0]['over']:,.2f}")
+                findings.append(f"🔴 合同 {over_list[0]['id']} 累计超额开票 ¥{over_list[0]['over']:,.2f}")
             if under_list:
-                findings.append(f"🟡 中危: 发票 {under_list[0]['id']} 付款欠收缺口 ¥{under_list[0]['gap']:,.2f}")
+                findings.append(f"🟡 发票 {under_list[0]['id']} 付款欠收缺口 ¥{under_list[0]['gap']:,.2f}")
             if third_list:
-                findings.append(f"🔴 高危: 付款流水 {third_list[0]['id']} 存在第三方资金代付 (抬头: {third_list[0]['buyer_name']}, 付款方: {third_list[0]['payer_name']})")
+                findings.append(f"🔴 付款流水 {third_list[0]['id']} 存在第三方代付 (抬头: {third_list[0]['buyer_name']}, 付款方: {third_list[0]['payer_name']})")
                 
             if not findings:
                 summary_text = "✅ 业财图谱比对完成：未发现合同超额开票、付款欠收或第三方代付异常。"
+                findings_html = "<li>未发现任何合规异常。</li>"
             else:
                 summary_text = "❌ 业财核销图谱比对警报：\n" + "\n".join(findings)
+                findings_html = "".join([f"<li class='text-rose-300'>{f}</li>" for f in findings])
                 
             mcp_result = {"status": "ok", "summary": summary_text}
+            qdrant_title = "发票与收付款多维核销校验 (TuGraph)"
+            
+            # 拼装前端 HTML 报告
+            tugraph_md = f"""
+            <div class="space-y-4 leading-relaxed text-xs sm:text-sm">
+              <div class="flex items-center gap-2 text-rose-400 font-semibold mb-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
+                <span>业财发票核销图穿透研判结果 (TuGraph)</span>
+              </div>
+              <p>经 TuGraph 业财物理图谱穿透计算，自动比对签署主体 <b>{filename}</b> 的关系网络，发现以下异常：</p>
+              <ul class="list-disc pl-5 space-y-2 text-slate-400 text-xs">
+                {findings_html}
+              </ul>
+              <div class="mt-4 pt-3 border-t border-white/5 flex justify-between items-center text-[10px] text-slate-500">
+                <span>存储引擎: TuGraph-DB Engine</span>
+                <span>穿透分析: 业财核销多跳关联</span>
+              </div>
+            </div>
+            """
         except Exception as e:
             mcp_result = {"error": f"TuGraph audit query failed: {e}"}
             summary_text = f"TuGraph 审计执行失败: {e}"
+            qdrant_title = "发票与收付款多维核销校验 (TuGraph)"
+            tugraph_md = f"<div class='text-rose-400 text-xs'>TuGraph 审计执行失败: {e}</div>"
     else:
         try:
             supplier_name = os.path.splitext(filename)[0] if filename else ""
@@ -403,6 +426,8 @@ def api_process(body: dict):
         except Exception as e:
             mcp_result = {"error": f"mcp call failed: {e}"}
             summary_text = f"mcp call failed: {e}"
+        qdrant_title = "向量舆情相似度比对 (Qdrant)"
+        tugraph_md = None
 
     # 2. 拼最终报告
     report = {
@@ -412,6 +437,8 @@ def api_process(body: dict):
         "filename": filename,
         "content_type": content_type,
         "mcp_result_summary": summary_text,
+        "qdrant_title": qdrant_title,
+        "tugraph_md": tugraph_md,
         "completed_at": __import__("datetime").datetime.now().isoformat(),
     }
 

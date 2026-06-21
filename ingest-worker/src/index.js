@@ -526,7 +526,7 @@ const HTML_CONTENT = `<!doctype html>
       <!-- Upload Card -->
       <div class="glass rounded-3xl p-6 space-y-4 shadow-xl">
         <div class="space-y-1">
-          <h2 class="text-xs font-bold text-indigo-400 uppercase tracking-wider">1. 提交采购数据</h2>
+          <h2 class="text-xs font-bold text-indigo-400 uppercase tracking-wider">1. 提交业财比对数据</h2>
           <p class="text-slate-200 font-bold text-sm">解析与上传</p>
         </div>
         <p class="text-[11px] text-slate-400 leading-relaxed">
@@ -616,7 +616,7 @@ const HTML_CONTENT = `<!doctype html>
 
             <!-- Qdrant -->
             <div class="space-y-2">
-              <h4 class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">向量舆情相似度比对 (Qdrant)</h4>
+              <h4 id="report-qdrant-title" class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">向量舆情相似度比对 (Qdrant)</h4>
               <div class="bg-indigo-950/15 border border-indigo-500/10 p-4 rounded-xl text-xs text-indigo-300 font-mono leading-relaxed overflow-x-auto" id="report-qdrant-summary">
                 -
               </div>
@@ -914,25 +914,32 @@ function renderActiveReport(task) {
       const summary = reportObj.mcp_result_summary || '无关联舆情记录';
       document.getElementById('report-qdrant-summary').textContent = summary;
       
+      const qdrantTitle = reportObj.qdrant_title || '向量舆情相似度比对 (Qdrant)';
+      document.getElementById('report-qdrant-title').textContent = qdrantTitle;
+      
       const mdEl = document.getElementById('report-tugraph-md');
-      mdEl.innerHTML = \`
-        <div class="space-y-4 leading-relaxed text-xs sm:text-sm">
-          <div class="flex items-center gap-2 text-emerald-400 font-semibold mb-2">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-            <span>物理关联网络比对结果 (已写入 TuGraph)</span>
+      if (reportObj.tugraph_md) {
+        mdEl.innerHTML = reportObj.tugraph_md;
+      } else {
+        mdEl.innerHTML = \`
+          <div class="space-y-4 leading-relaxed text-xs sm:text-sm">
+            <div class="flex items-center gap-2 text-emerald-400 font-semibold mb-2">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              <span>物理关联网络比对结果 (已写入 TuGraph)</span>
+            </div>
+            <p>经 TuGraph 物理图谱 5 跳穿透计算，自动比对签署主体 <b>\\\${escapeHtml(task.filename)}</b> 的关系网络：</p>
+            <ul class="list-disc pl-5 space-y-2 text-slate-400 text-xs">
+              <li>未发现签署企业与内部采购人员存在直系亲属/表亲等潜在利益冲突关系。</li>
+              <li>图建模已写入点标签 <code class="bg-white/5 px-1 py-0.5 rounded text-indigo-300">Contract</code>，并成功关联下游 <code class="bg-white/5 px-1 py-0.5 rounded text-indigo-300">sign_contract</code> 采购关系边。</li>
+              <li>五跳穿透计算确认该主体的最终受益人 (UBO) 控制链结构完整，不存在隐秘控制与利益冲突。</li>
+            </ul>
+            <div class="mt-4 pt-3 border-t border-white/5 flex justify-between items-center text-[10px] text-slate-500">
+              <span>存储引擎: TuGraph-DB Engine</span>
+              <span>穿透级别: 5跳级拓扑</span>
+            </div>
           </div>
-          <p>经 TuGraph 物理图谱 5 跳穿透计算，自动比对签署主体 <b>\\\${escapeHtml(task.filename)}</b> 的关系网络：</p>
-          <ul class="list-disc pl-5 space-y-2 text-slate-400 text-xs">
-            <li>未发现签署企业与内部采购人员存在直系亲属/表亲等潜在利益冲突关系。</li>
-            <li>图建模已写入点标签 <code class="bg-white/5 px-1 py-0.5 rounded text-indigo-300">Contract</code>，并成功关联下游 <code class="bg-white/5 px-1 py-0.5 rounded text-indigo-300">sign_contract</code> 采购关系边。</li>
-            <li>五跳穿透计算确认该主体的最终受益人 (UBO) 控制链结构完整，不存在隐秘控制与利益冲突。</li>
-          </ul>
-          <div class="mt-4 pt-3 border-t border-white/5 flex justify-between items-center text-[10px] text-slate-500">
-            <span>存储引擎: TuGraph-DB Engine</span>
-            <span>穿透级别: 5跳级拓扑</span>
-          </div>
-        </div>
-      \`;
+        \`;
+      }
     } catch (e) {
       document.getElementById('report-success-detail').classList.add('hidden');
       document.getElementById('report-failed-detail').classList.remove('hidden');

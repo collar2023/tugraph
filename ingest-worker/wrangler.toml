@@ -54,4 +54,4 @@ new_classes = ["TaskCoordinator"]
 [vars]
 BACKEND_URL = "https://fde.188001.xyz"   # 本地后端（cloudflared 已 tunnel 通）
 BACKEND_SECRET_HEADER = "X-Harness-Secret"
-HARNESS_SECRET = "YOUR_HARNESS_SECRET"  # 同步后端 env（阶段 2 调本地用）
+HARNESS_SECRET = "GKxfydwnbfvFKW0QVqc1d80Y7uArzBPxwYAbcSTcY-Q"  # 同步后端 env（阶段 2 调本地用）
