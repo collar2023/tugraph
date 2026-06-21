@@ -1,4 +1,6 @@
-# TuGraph-Intelligence: 极简直连 GraphRAG 智能体平台 (v3.6)
+# Lean-GraphRAG: 中小企业轻量级业财合规与长尾自治审计平台 (v3.6)
+
+**本项目是面向中小企业业财合规的轻量级 Lean GraphRAG 架构。采用 CF Workers/Queue 边缘承接并解耦文件录入，通过自定义 MCP（模型上下文协议）服务将本地 TuGraph 与 Qdrant 封装为智能体工具，内置 Cypher 安全护栏与 LIMIT 注入保护数据库；首创“物理审计日志 + HITL 人机协同”闭环，低置信度或异常操作自动流转待审，支持人工修正覆盖灌入，以极低 Token 成本实现高确定性的长尾自治审计。**
 
 本平台是部署于 **Oracle ARM (4C/24G)** 环境下的多业务自主风控研判系统。平台已全面升级为**直连主方案架构（Lean GraphRAG Architecture）**，废除了重型 Java 语义服务（OpenSPG）、MariaDB 关系库与 10 容器的 TuGraph 集群，仅保留轻量级国产图数据库（**TuGraph**）与向量检索库（**Qdrant**）。
 
