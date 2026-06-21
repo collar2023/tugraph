@@ -744,8 +744,13 @@ def bulk_insert_relationships(relationships_json: str, idempotency_key: Optional
                         raise ValueError(f"Label或Relation包含非法字符: {src_label}, {dst_label}, {relation}")
 
                     # 确定源/终节点的主键属性名
-                    # 根据 Label 名动态推断主键（覆盖 Person/Corp/Contract 等业务 Label）
-                    _PRIMARY_KEY_MAP = {"Person": "person_id", "Corp": "corp_id", "Contract": "contract_id"}
+                    _PRIMARY_KEY_MAP = {
+                        "Person": "person_id",
+                        "Corp": "corp_id",
+                        "Contract": "contract_id",
+                        "Invoice": "invoice_id",
+                        "Payment": "payment_id"
+                    }
                     src_key = _PRIMARY_KEY_MAP.get(src_label)
                     dst_key = _PRIMARY_KEY_MAP.get(dst_label)
                     if not src_key or not dst_key:
