@@ -210,12 +210,23 @@ export default {
           started_at: new Date().toISOString(),
         });
 
-        // 2. 调本地后端 /api/process
+        // 2. 调 R2 读取文件内容并传给本地后端 /api/process
+        let fileContent = "";
+        try {
+          const fileObj = await env.CONTRACTS.get(payload.r2_key);
+          if (fileObj) {
+            fileContent = await fileObj.text();
+          }
+        } catch (r2Err) {
+          console.error(`[queue] failed to read R2 file ${payload.r2_key}: ${r2Err.message}`);
+        }
+
         const result = await callBackend(env, "/api/process", {
           task_id: payload.task_id,
           action: payload.action,
           r2_key: payload.r2_key,
           filename: payload.filename,
+          file_content: fileContent,
         });
 
         // 3. 写状态
