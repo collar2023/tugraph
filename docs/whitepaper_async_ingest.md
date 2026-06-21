@@ -458,3 +458,30 @@ setTaskStatus(env, taskId, status, extra)
 **治理闭环** = 业务调用留痕（AuditAction）+ 异常自动标（flag_for_review）+ 人工决定（manual_commit 三种 outcome）+ 修正可重灌（override 复用 bulk_insert）。**全部在 TuGraph 图谱里可查、可审、可回放**。
 
 要查最新治理记录直接调 `query_audit_actions(limit=N)` / `list_pending_reviews(status_filter="pending")`。
+
+---
+
+## 📊 9. 架构鲁棒性与企业级泛化研判 (Architecture Robustness & Enterprise Generalization)
+
+> **TL;DR**: 针对开发/测试阶段容易产生“场景过拟合”，而企业实际生产环境千变万化的特点，本节对当前系统在真实企业级环境中的可用性、缺陷风险及升级路径进行客观评估，确保系统架构具备高度的容灾能力与扩展性。
+
+### 9.1 基础设施架构的防御性设计 (Infrastructure Resilience)
+当前系统在**高并发容灾、安全性拦截、人工干预兜底**等底层基础设施层面拥有极佳的鲁棒性：
+- **异步解耦与重试退避**：依托 `Cloudflare Edge + Queue` 队列异步处理。当本地后端在集中数据录入时由于网络抖动、服务重启或图库负载过高而出现短暂瘫痪（如 `mcp-proxy` 重启），CF Queue 能够自动发起指数退避重试，确保业务“零丢单”。
+- **MCP 图库安全护栏**：`mcp_server.py` 内置了原生 Cypher 拦截器。大模型或开发人员注入的危险 DDL 操作（如 `DELETE`/`DROP`）会被自动拦截，且强制实施了行数安全硬上限（LIMIT 1000），保障图数据库引擎不被内存爆破或指令注入击穿。
+- **5% 人机协同容错闭环 (HITL)**：整个系统内建了待审流转逻辑。在数据解析冲突、Cypher 查询异常或结果置信度低时，自动通过 `flag_for_review` 生成 `PendingReview` 点，配合默认审计主体 `futen@outlook.com` 保证“95% 自动化率 + 5% 人工介入 = 100% 财务准确率”的企业合规要求。
+
+### 9.2 业务逻辑层的场景过拟合风险 (Overfitting Risks)
+虽然底层基础架构非常扎实，但在当前的**财务核销业务逻辑层**，存在明显的特定场景拟合局限：
+- **核销判定规则硬编码**：当前超开、欠收判定依靠固定的 `MATCH` Cypher 关系表达式（如合同与发票 1:N 映射）。真实企业的财务场景涉及多对多映射、含税与不含税差异、红字发票冲账、预付款等，硬编码规则难以适配多变的真实业务。
+- **分布式 Session 局限**：当前的 `session_id` 续期读取本地文件 `scratch/audit_session.json`。在生产环境的多节点/多代理分布式集群中，这会导致会话不同步或审计链丢失。
+- **相似度算法字面量局限**：向量库检索供应商采用 2-gram 字符 Jaccard 相似度匹配。它仅对字面量拼写敏感，不具备语义关联能力（如无法关联“Alibaba”与“淘宝”，或容易混淆不同法人实体），在千万级工商主体比对时误报率极高。
+
+### 9.3 企业级高可用生产演进路线 (Enterprise Upgrade Roadmap)
+
+| 维度 | 当前拟合实现 | 企业级鲁棒升级方案 |
+| :--- | :--- | :--- |
+| **规则研判** | 硬编码 3 条 Cypher 核销语句 | **图谱 Schema 动态映射 (RAG-to-Cypher)**：大模型首先读取 `get_graph_schema`，结合企业业务字典，动态生成带防御机制的 Cypher 语句，适应不断变化的 Schema 属性。 |
+| **主体比对** | Jaccard n-gram 字符相似度 | **稠密向量 + 知识图谱消歧**：引入真正的 Embedding 模型（如 BGE / MiniMax Vector），并在 Qdrant 中采用余弦相似度检索，结合 TuGraph 物理主体的统一社会信用代码进行绝对消歧。 |
+| **审计会话** | 本地文件 `audit_session.json` | **分布式缓存/图数据库状态化**：将会话状态写入分布式缓存（Redis）或直接存入 TuGraph 图数据库自身的 `AuditSession` 顶点属性中。 |
+| **核销容错** | 严格的恒等式比对（A > B） | **弹性容差阈值**：引入企业财务常见的浮点容差（例如允许 ¥5.00 以内的抹零或汇率换算尾差），避免细微尾差导致报警泛滥。 |
