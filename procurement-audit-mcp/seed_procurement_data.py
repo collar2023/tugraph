@@ -10,7 +10,7 @@ from neo4j import GraphDatabase
 # ---------- 配置 ----------
 URI = "bolt://localhost:7687"
 USER = "admin"
-PASSWORD = "YOUR_TUGRAPH_PASSWORD"
+PASSWORD = "73@TuGraph"
 DB = "default"
 
 def generate_csv_sample():

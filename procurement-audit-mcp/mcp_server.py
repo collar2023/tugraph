@@ -26,7 +26,7 @@ mcp = FastMCP("Procurement-Audit-MCP-Service")
 # ---------- 数据库连接配置 ----------
 TUGRAPH_URI = os.environ.get("TUGRAPH_URI", "bolt://localhost:7687")
 TUGRAPH_USER = os.environ.get("TUGRAPH_USER", "admin")
-TUGRAPH_PASSWORD = os.environ.get("TUGRAPH_PASSWORD", "YOUR_TUGRAPH_PASSWORD")
+TUGRAPH_PASSWORD = os.environ.get("TUGRAPH_PASSWORD", "73@TuGraph")
 TUGRAPH_DB = os.environ.get("TUGRAPH_DB", "default")
 
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")

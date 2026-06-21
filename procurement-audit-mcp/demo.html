@@ -212,7 +212,7 @@ async function loadPending(status) {
 
 // ===== 审核员决定 =====
 async function commit(reviewId, outcome, note) {
-  const actor = prompt("请输入审核员身份 (email):", "alice@example.com") || "demo-user";
+  const actor = prompt("请输入审核员身份 (email):", "futen@outlook.com") || "demo-user";
   const r = await callTool("manual_commit", { review_id: reviewId, outcome, note, actor });
   if (r.ok) {
     alert("✓ 已决定: " + outcome + "\n" + JSON.stringify(r.result, null, 2));
@@ -223,7 +223,7 @@ async function commit(reviewId, outcome, note) {
 }
 
 async function commitOverride(reviewId) {
-  const actor = prompt("请输入审核员身份 (email):", "alice@example.com") || "demo-user";
+  const actor = prompt("请输入审核员身份 (email):", "futen@outlook.com") || "demo-user";
   // 默认灌入一个 Corp -> Contract 的 sign_contract（边约束允许）
   const payload = JSON.stringify([{
     src_id: "c_102", src_label: "Corp",

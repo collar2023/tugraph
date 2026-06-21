@@ -338,37 +338,36 @@ def api_process(body: dict):
     
     if is_invoice_scenario:
         try:
-            from neo4j import GraphDatabase
-            driver = GraphDatabase.driver("bolt://localhost:7687", auth=("admin", "73@TuGraph"))
-            with driver.session(database="default") as sess:
-                # 1) 超开
-                q_over = """
-                MATCH (c:Contract)-[:HAS_INVOICE]->(i:Invoice)
-                WITH c, sum(i.amount) AS total_invoiced, collect(i.invoice_code) AS invoice_list
-                WHERE total_invoiced > c.amount
-                RETURN c.contract_id AS id, total_invoiced - c.amount AS over
-                """
-                over_list = sess.run(q_over).data()
-                
-                # 2) 欠付
-                q_under = """
-                MATCH (p:Payment)-[r:MATCHED_INVOICE]->(i:Invoice)
-                WITH i, sum(r.matched_amount) AS total_paid
-                WHERE total_paid < i.amount
-                RETURN i.invoice_id AS id, i.amount - total_paid AS gap
-                """
-                under_list = sess.run(q_under).data()
-                
-                # 3) 第三方
-                q_third = """
-                MATCH (p:Payment)-[:MATCHED_INVOICE]->(i:Invoice),
-                      (p)-[:PAID_BY]->(payer:Corp),
-                      (i)-[:ISSUED_TO]->(buyer:Corp)
-                WHERE NOT (payer.corp_id = buyer.corp_id)
-                RETURN p.payment_id AS id, buyer.name AS buyer_name, payer.name AS payer_name
-                """
-                third_list = sess.run(q_third).data()
-            driver.close()
+            # 1) 超开
+            q_over = """
+            MATCH (c:Contract)-[:HAS_INVOICE]->(i:Invoice)
+            WITH c, sum(i.amount) AS total_invoiced, collect(i.invoice_code) AS invoice_list
+            WHERE total_invoiced > c.amount
+            RETURN c.contract_id AS id, total_invoiced - c.amount AS over
+            """
+            over_res = mcp.call("execute_cypher", {"query": q_over})
+            over_list = over_res.get("rows", [])
+            
+            # 2) 欠付
+            q_under = """
+            MATCH (p:Payment)-[r:MATCHED_INVOICE]->(i:Invoice)
+            WITH i, sum(r.matched_amount) AS total_paid
+            WHERE total_paid < i.amount
+            RETURN i.invoice_id AS id, i.amount - total_paid AS gap
+            """
+            under_res = mcp.call("execute_cypher", {"query": q_under})
+            under_list = under_res.get("rows", [])
+            
+            # 3) 第三方
+            q_third = """
+            MATCH (p:Payment)-[:MATCHED_INVOICE]->(i:Invoice),
+                  (p)-[:PAID_BY]->(payer:Corp),
+                  (i)-[:ISSUED_TO]->(buyer:Corp)
+            WHERE NOT (payer.corp_id = buyer.corp_id)
+            RETURN p.payment_id AS id, buyer.name AS buyer_name, payer.name AS payer_name
+            """
+            third_res = mcp.call("execute_cypher", {"query": q_third})
+            third_list = third_res.get("rows", [])
             
             # 拼装审计报告
             findings = []
@@ -388,6 +387,21 @@ def api_process(body: dict):
                 
             mcp_result = {"status": "ok", "summary": summary_text}
             qdrant_title = "发票与收付款多维核销校验 (TuGraph)"
+            
+            if findings:
+                try:
+                    audit_res = mcp.call("query_audit_actions", {"limit": 1})
+                    actions = audit_res.get("actions", [])
+                    if actions:
+                        last_action_id = actions[0].get("aid")
+                        review_res = mcp.call("flag_for_review", {
+                            "action_id": last_action_id,
+                            "reason": "low_confidence",
+                            "note": f"业财比对存在 {len(findings)} 项核销异常，自动触发人机协同流转。"
+                        })
+                        print(f"[api_process] auto flag_for_review success: {review_res}", flush=True)
+                except Exception as ex:
+                    print(f"[api_process] auto flag_for_review failed: {ex}", flush=True)
             
             # 拼装前端 HTML 报告
             tugraph_md = f"""

@@ -526,7 +526,7 @@ const HTML_CONTENT = `<!doctype html>
       <!-- Upload Card -->
       <div class="glass rounded-3xl p-6 space-y-4 shadow-xl">
         <div class="space-y-1">
-          <h2 class="text-xs font-bold text-indigo-400 uppercase tracking-wider">1. 提交业财比对数据</h2>
+          <h2 class="text-xs font-bold text-indigo-400 uppercase tracking-wider">1. 提交企业数据资产</h2>
           <p class="text-slate-200 font-bold text-sm">解析与上传</p>
         </div>
         <p class="text-[11px] text-slate-400 leading-relaxed">
@@ -996,7 +996,7 @@ async function loadPending() {
 }
 
 async function commitDecision(reviewId, outcome, note) {
-  const actor = prompt("请输入审核员身份 (email):", "auditor@example.com") || "demo-user";
+  const actor = prompt("请输入审核员身份 (email):", "futen@outlook.com") || "demo-user";
   const r = await callTool("manual_commit", { review_id: reviewId, outcome, note, actor });
   if (r.ok) {
     alert("✓ 决策提交成功: " + outcome);
@@ -1008,7 +1008,7 @@ async function commitDecision(reviewId, outcome, note) {
 }
 
 async function commitOverride(reviewId) {
-  const actor = prompt("请输入审核员身份 (email):", "auditor@example.com") || "demo-user";
+  const actor = prompt("请输入审核员身份 (email):", "futen@outlook.com") || "demo-user";
   const defaultPayload = JSON.stringify([{
     src_id: "c_102", src_label: "Corp",
     dst_id: "CT-2026-001", dst_label: "Contract",

@@ -24,7 +24,7 @@ from langgraph.graph import END, START, StateGraph
 # ---------- TuGraph 连接 ----------
 TUGRAPH_URI = "bolt://localhost:7687"
 TUGRAPH_USER = "admin"
-TUGRAPH_PASSWORD = "YOUR_TUGRAPH_PASSWORD"
+TUGRAPH_PASSWORD = "73@TuGraph"
 TUGRAPH_DB = "default"
 
 # ---------- MiniMax 客户端初始化 ----------

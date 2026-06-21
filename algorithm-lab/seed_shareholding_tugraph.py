@@ -2,14 +2,14 @@
 seed_shareholding_tugraph.py — 将股权穿透/最终受益人(UBO)场景测试数据灌入 TuGraph
 ========================================================================
 
-连接: bolt://localhost:7687, DB: default, admin / YOUR_TUGRAPH_PASSWORD
+连接: bolt://localhost:7687, DB: default, admin / 73@TuGraph
 """
 import sys
 from neo4j import GraphDatabase
 
 URI = "bolt://localhost:7687"
 USER = "admin"
-PASSWORD = "YOUR_TUGRAPH_PASSWORD"
+PASSWORD = "73@TuGraph"
 DB = "default"
 
 def create_schema(driver):

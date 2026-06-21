@@ -2,7 +2,7 @@
 seed_data.py — D 路线 TuGraph 反欺诈 demo 数据初始化
 ======================================================
 
-TuGraph 4.5.1, bolt://localhost:7687, default graph, user/pass: admin/YOUR_TUGRAPH_PASSWORD
+TuGraph 4.5.1, bolt://localhost:7687, default graph, user/pass: admin/73@TuGraph
 
 Schema (简化版, 只用核心 3 个 tag + 2 个 edge 演示反欺诈核心场景):
   Vertex:  Applicant { applicant_id PRIMARY, name, age }
@@ -18,7 +18,7 @@ from neo4j import GraphDatabase
 
 URI = "bolt://localhost:7687"
 USER = "admin"
-PASSWORD = "YOUR_TUGRAPH_PASSWORD"
+PASSWORD = "73@TuGraph"
 DB = "default"
 
 
