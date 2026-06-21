@@ -514,7 +514,7 @@ def get_graph_schema() -> str:
         with driver.session(database=TUGRAPH_DB) as session:
             result = session.run("CALL dbms.graph.getGraphSchema()")
             record = result.single()
-            if record and "schema" in record:
+            if record and "schema" in record.keys():
                 # 返回完整的 Schema 详情 JSON
                 return record["schema"]
             return json.dumps({"message": "未查询到 Schema 信息"})
@@ -723,6 +723,28 @@ def bulk_insert_relationships(relationships_json: str, idempotency_key: Optional
     except Exception as e:
         return json.dumps({"error": f"三元组解析失败: {str(e)}"})
 
+    # 动态构建主键映射表，支持图谱本体自适应注入
+    primary_key_map = {}
+    try:
+        schema_data = json.loads(get_graph_schema())
+        for item in schema_data.get("schema", []):
+            if item.get("type") == "VERTEX" and "label" in item and "primary" in item:
+                primary_key_map[item["label"]] = item["primary"]
+    except Exception:
+        pass
+    
+    # 静态兜底
+    _STATIC_MAP = {
+        "Person": "person_id",
+        "Corp": "corp_id",
+        "Contract": "contract_id",
+        "Invoice": "invoice_id",
+        "Payment": "payment_id"
+    }
+    for k, v in _STATIC_MAP.items():
+        if k not in primary_key_map:
+            primary_key_map[k] = v
+
     driver = get_tugraph_driver()
     success_count = 0
     errors = []
@@ -743,18 +765,10 @@ def bulk_insert_relationships(relationships_json: str, idempotency_key: Optional
                             re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", relation)):
                         raise ValueError(f"Label或Relation包含非法字符: {src_label}, {dst_label}, {relation}")
 
-                    # 确定源/终节点的主键属性名
-                    _PRIMARY_KEY_MAP = {
-                        "Person": "person_id",
-                        "Corp": "corp_id",
-                        "Contract": "contract_id",
-                        "Invoice": "invoice_id",
-                        "Payment": "payment_id"
-                    }
-                    src_key = _PRIMARY_KEY_MAP.get(src_label)
-                    dst_key = _PRIMARY_KEY_MAP.get(dst_label)
+                    src_key = primary_key_map.get(src_label)
+                    dst_key = primary_key_map.get(dst_label)
                     if not src_key or not dst_key:
-                        raise ValueError(f"未知 Label: src={src_label} dst={dst_label}，请扩展 _PRIMARY_KEY_MAP")
+                        raise ValueError(f"未知 Label: src={src_label} dst={dst_label}，无法通过 Schema 动态解析主键")
 
                     # 动态拼接 ON CREATE / ON MATCH 幂等属性赋值
                     on_create_assigns = []
@@ -1105,6 +1119,29 @@ def manual_commit(review_id: str, outcome: str, note: str = "",
                     rels = json.loads(override_payload_json)
                 except Exception as e:
                     return json.dumps({"error": "override_payload_json 解析失败: " + str(e)}, ensure_ascii=False)
+                
+                # 动态构建主键映射表，支持图谱自适应注入
+                primary_key_map = {}
+                try:
+                    schema_data = json.loads(get_graph_schema())
+                    for item in schema_data.get("schema", []):
+                        if item.get("type") == "VERTEX" and "label" in item and "primary" in item:
+                            primary_key_map[item["label"]] = item["primary"]
+                except Exception:
+                    pass
+                
+                # 静态兜底
+                _STATIC_MAP = {
+                    "Person": "person_id",
+                    "Corp": "corp_id",
+                    "Contract": "contract_id",
+                    "Invoice": "invoice_id",
+                    "Payment": "payment_id"
+                }
+                for k, v in _STATIC_MAP.items():
+                    if k not in primary_key_map:
+                        primary_key_map[k] = v
+
                 success_count = 0
                 errs = []
                 for idx, rel in enumerate(rels):
@@ -1117,11 +1154,10 @@ def manual_commit(review_id: str, outcome: str, note: str = "",
                                 re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", relation)):
                             raise ValueError("Label或Relation格式不合法")
                             
-                        primary_key_map = {"Person": "person_id", "Corp": "corp_id", "Contract": "contract_id"}
                         src_key = primary_key_map.get(src_label)
                         dst_key = primary_key_map.get(dst_label)
                         if not src_key or not dst_key:
-                            raise ValueError("未知 Label: " + str(src_label) + " / " + str(dst_label))
+                            raise ValueError("未知 Label: " + str(src_label) + " / " + str(dst_label) + "，无法通过 Schema 动态解析主键")
                         props = rel.get("properties", {})
                         
                         on_create_assigns = []

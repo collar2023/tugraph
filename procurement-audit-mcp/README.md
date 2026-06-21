@@ -97,53 +97,43 @@ python3 seed_procurement_data.py
 
 ## 5. 核心工具组的底层设计原理与商业价值 💡
 
-在企业级 AI Agent 与混合 GraphRAG 系统的落地工程中，数据录入与三元组转化（三元化）往往占据了 80% 以上的时间与工作量。本 MCP 服务端通过以下三大底层机制，彻底解决了这一瓶颈并赋予了系统极佳的扩展性：
+在企业级 AI Agent 与混合 GraphRAG 系统的落地工程中，数据录入与三元组转化（三元化）往往占据了 80% 以上的时间与工作量。本 MCP 服务端通过以下两个最核心的工具板块（板块一：数据探索与自适应建模；板块二：图谱演算与语义写入），实现了安全图谱读写、零注入风险以及数据自演变：
 
-### 5.1 解决“三元化灌入”痛点：大模型无需编写复杂的 Cypher 语句 (物理执行与语义解耦)
+### 5.1 第一板块：数据探索与自适应建模工具的运行机制
+这一板块旨在赋予大模型“视觉”和“本体自进化”能力，让 AI 能够针对异构的原始表格完成动态适配：
+1. **`get_raw_data_sample` (数据勘探探针)**：
+   * **原理**：安全地只读取传入 CSV/Excel 的前几行样本数据，返回给大模型。
+   * **价值**：大模型的“眼睛”，防止在没有见过原始数据列名、数值格式和空值情况时盲目猜测 Schema。
+2. **`get_graph_schema` (拉取物理地图)**：
+   * **原理**：直接向 TuGraph 查询当前数据库已建立的所有顶点、边的 Label 和属性（JSON 格式）。
+   * **价值**：向大模型提供已存在的实体和关系骨干表地图，指导其如何把抽取出的数据嫁接到已有底座上。
+3. **`create_graph_label` (动态本体注入与演进化)**：
+   * **原理**：大模型根据数据特征，推导出新 Label DDL 的 JSON payload（如新增 `Vehicle` 实体），通过 `CALL db.createVertexLabelByJson`（或 Edge 对应的过程）动态建立结构。
+   * **安全护栏**：
+     * **正则拦截**：对 `label_name` 强制执行 `re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", label_name)` 校验，防止恶意的 procedure 注入。
+     * **约束绑定**：自动把主键的 `is_primary`、`is_unique`、`is_notnull` 强制设为 `True`，保证新建实体符合底线规则。
+     * **白名单与工程师审核（可选）**：通过结合 HITL 人工协作网页，可实现由大模型提出 Schema 扩建方案、人类一键确认后动态写入图谱的卓越交付管线。
 
-在传统的图谱建模写入中，大模型提取出三元组后（如 `张三（Person） --持股 15%--> 某公司（Corp）`），必须尝试生成用于写入的物理 Cypher 语句。这会导致极高的崩溃率，主要由于：
-1. **实体主键属性混淆**：大模型需要记住 `Person` 的主键属性名叫 `person_id`，而 `Corp` 的主键属性名叫 `corp_id`。一旦模型写错成 `{id: "..."}`，TuGraph 就会直接报错崩溃。
-2. **空指针/静默失败**：如果 `Person` 或 `Corp` 节点在图数据库中还不存在，直接执行 `MATCH ... CREATE` 会因为匹配为空而静默失败，无法建边。
-3. **语法方言冲突**：大模型写出的 Cypher 容易混淆不同图数据库的细微语法差异，导致频繁报语法错。
+### 5.2 第二板块：图谱演算与语义写入的防爆与防重设计
+该板块是数据写入与查询的核心网关，为高并发、复杂查询下的物理图数据库拉起了一道防火墙：
+1. **`execute_cypher` (安全图谱演算通道)**：
+   * **黑名单拦截**：通过 `_enforce_safety(query)` 解析查询语句，一旦包含 `DELETE`、`DROP`、`CREATE`、`MERGE`、`SET` 等修改或删除关键字，直接拒绝执行并记入审计。大模型绝对无法通过此工具修改或删除数据库任何数据。
+   * **自动注入 LIMIT 1000（防爆盾）**：如果大模型生成的 Cypher 没有指定 LIMIT，代码在底层会自动拼接 `LIMIT 1000`，有效防止全表扫描导致系统发生 OOM 崩溃。
+   * **8秒闹钟信号硬超时**：图数据库的多表关联（Join）极耗 CPU。如果查询发生复杂笛卡尔积或超过 8 秒，直接强行中止，保护数据库的系统可用性。
+2. **`bulk_insert_relationships` (批量三元组解耦灌入)**：
+   * **大模型与物理细节解耦**：大模型不需要编写复杂的物理 Cypher 写入语句，它只需提取语义级别的标准 JSON（包含 src_id, src_label, dst_id, dst_label, relation）。MCP 服务端接管主键查找（如自动映射 `Person -> person_id`, `Corp -> corp_id`），由后端 Python 脚本自动装载，**将大模型因为写错 SQL/Cypher 方言导致的写入崩溃率降为 0%**。
+   * **MERGE 模式幂等写入**：生成的 Cypher 全部基于属性绑定的 `ON CREATE SET` / `ON MATCH SET` 的 `MERGE` 语法，确保节点和边均是幂等写入，节点不存在则自动跳过建边，保证数据库整洁度。
+   * **文件级去重缓存 (Idempotency Engine)**：每次写入结果会在 `scratch/mcp_writes.jsonl` 中持久化一份 idempotency key（关系数据的 SHA256 哈希值）。当大模型或队列重试重放时，**直接在 0 毫秒内命中缓存并返回，不再冲击底层数据库**，杜绝了重复连边与物理锁表风险。
+3. **`search_vector_news` (向量舆情研判)**：
+   * **双驱对齐**：直连 Qdrant 检索供应商近期的诉讼与舆情，与图谱内部的财务对账链路合并分析，形成多维度的风险合规风控审计结果。
 
-**MCP 工具组的解耦原理：**
-- **大模型只管语义提取**：大模型读完合同，只需要把提取的关系整理成一个**标准的、无视数据库类型的 JSON 数组**：
-  ```json
-  [
-    {
-      "src_id": "p_zhangsan",
-      "src_label": "Person",
-      "dst_id": "c_somecorp",
-      "dst_label": "Corp",
-      "relation": "hold_share",
-      "properties": { "share": 15.0 }
-    }
-  ]
-  ```
-- **MCP 服务端接管物理写入**：大模型直接调用工具 `bulk_insert_relationships(relationships_json=...)`。MCP 服务端在底层用 Python 静态代码自动映射主键（如 `Person` 映射至 `person_id`）、处理节点前置建立规避空指针，并用经过压测的参数化 Cypher 模板安全刷入 TuGraph，**直接把三元化阶段大模型因为写错 SQL/Cypher 导致的报错率降低到了 0%**。
-- **性能优势**：大模型一次性把 100 条三元组丢给 MCP，MCP 在底层用长连接或批量 Pipeline 统一合并写入，减少物理数据库连接的往返延迟，比大模型单独发起网络连接快了数十倍。
+### 5.3 屏蔽物理数据库差异，实现“一次编写，到处运行” (架构解耦与商业价值)
+* **统一语义接口**：大模型 Agent 仅通过标准的 MCP Tools（如 `execute_cypher`、`search_vector_news`）与外部交互，物理驱动细节完全被隔离在 `mcp_server.py` 内部。
+* **信创国产化极速热切换**：
+  * **向量库从 Qdrant 换成国产 Milvus**：只需在 `mcp_server.py` 的 `search_vector_news` 里把 `QdrantClient` 替换为 `pymilvus`，重写这几行查询。**大模型、云端队列和前端不需要修改任何代码**，即可平滑切换。
+  * **图数据库从 TuGraph 换成商业 Neo4j**：只需更改 `mcp_server.py` 的 Bolt 连接凭证。因为 TuGraph 的 Cypher 兼容 Neo4j，切换过程对大模型无感知，瞬间完成迁移。
+* **知识产权保护**：可将核心大模型 Agent 和业务状态机封装为闭源加密镜像（保护企业代码知识产权），仅公开暴露 `mcp_server.py` 作为适配器交由部署人员现场配置，极大降低了项目实施的摩擦风险。
 
-### 5.2 解决“逆向建模与探索”痛点：实现本体与 Schema 的 AI 自进化
-
-在企业交付环境中，不同部门导出的数据表格结构（Excel/CSV）千奇百怪。让程序员手工去给每个新场景写 DDL 建立图 Schema 极其浪费工时。
-
-**本体自进化工作原理：**
-1. **数据探针与特征识别 (Inspection)**：大模型通过 `get_raw_data_sample` 接口读取原始 Excel/CSV 表格的前几行，自动分析列名（如 `vendor_id`, `supplier_name`）与数据特征。
-2. **本体设计与推理 (Ontology Reasoning)**：大模型接收到数据特征，结合业务目标进行语义推理，自动推导图谱本体（应该建哪些点、哪些边、什么属性），并输出设计好的 JSON DDL 载荷。
-3. **Schema 动态注入 (Seeding)**：大模型调用 `create_graph_label` 工具。由于 TuGraph 原生支持通过 JSON 格式来定义和修改点边 Schema（如 `CALL db.createVertexLabelByJson`），MCP 服务端直接把大模型的 JSON 传递给 TuGraph 执行建 Label，**实现了“阅读数据 -> 设计 Schema -> 动态建库”的全自动管线**。
-4. **状态反馈与对齐 (Verification)**：建库成功后，大模型调用 `get_graph_schema` 重新拉取物理 Schema，验证点边是否已成功注册，然后指导下一步三元化灌入。这极大地减免了现场人工编写 DDL 建图的工作量，是交付工程师的绝对利器。
-5. **鲁棒性护栏（白名单机制）**：为防止模型在自动建库时导致“本体无序膨胀”（例如今天建了 `Corp` 节点，明天又建了一个 `Company` 节点），在生产中可设置只允许大模型在预设的词典范围内进行映射，或者在大模型设计好 Schema 建议后由部署工程师配合企业人员通过 HITL 协同页面一键确认，保障图谱质量。
-
-### 5.3 屏蔽物理数据库差异，实现“一次编写，到处运行” (信创对齐与架构解耦)
-
-在传统的开发中，大模型状态机代码中会直接引入特定的物理数据库驱动（如 `qdrant_client`、`neo4j`），一旦发生底层迁移（如客户强制要求将 Qdrant 向量库换成国产 Milvus，或将 TuGraph 换成商业 Neo4j），就需要修改大量底层代码和 Prompt，耗时数周并会引入 regression bug。
-
-**MCP 屏蔽差异原理：**
-- **统一语义层**：大模型 Agent 在运行中只感知标准的 MCP Tools 接口（如 `execute_cypher`、`search_vector_news`）。物理连接细节、凭证安全配置完全被隔离在 `mcp_server.py` 中。
-- **极速热切换**：
-  * **向量库由 Qdrant 换成 Milvus**：只需在 `mcp_server.py` 的 `search_vector_news` 工具内，把 `QdrantClient` 替换为 `pymilvus`，重写这几行查询。**大模型端、前端页面、云端队列不需要修改 1 行代码**，直接无缝跑通新向量库。
-  * **图数据库由 TuGraph 换成 Neo4j**：只需修改 `mcp_server.py` 顶部的 Bolt 连接地址和密码。因为 TuGraph 兼容 Neo4j 的 Cypher，大模型感知不到变更，瞬间完成迁移。
-- **商业价值**：这为企业级 PoC 交付提供了极高的敏捷度，能轻松满足各类“信创合规”的数据库对齐指标。同时，可将核心 Agent 状态机封装为闭源加密镜像（保护知识产权），仅将轻量的 `mcp_server.py` 暴露给工程师进行现场环境配置，保障了商业安全。
 
 ---
 

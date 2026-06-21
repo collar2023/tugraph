@@ -1,0 +1,4 @@
+logistics_id,carrier_name,vehicle_license,freight_cost,destination,dispatch_date
+L-2026-901,德邦物流,粤B-12345,15000.0,上海张江,2026-06-21
+L-2026-902,顺丰速运,沪A-88888,28000.0,北京中关村,2026-06-22
+L-2026-903,京东物流,京C-99999,12000.0,广州黄埔,2026-06-23
