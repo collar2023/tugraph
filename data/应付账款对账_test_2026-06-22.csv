@@ -1,0 +1,11 @@
+contract_id,title,supplier_name,amount,payment_terms,approver_name,invoice_id,invoice_amount,paid_amount
+CT-2026-001,钢材采购合同_对账,Moore-Kim,5000000.0,首付30%尾款验收,Alice Wang,INV-2026-001,5000000.0,5000000.0
+CT-2026-002,办公用品采购_对账,Bean Jones Benton,150000.0,验收后一次付清,Bob Lee,INV-2026-002,150000.0,150000.0
+CT-2026-003,服务器托管_对账,Ortega-Hoffman,1200000.0,季度预付,Carol Zhang,INV-2026-003,1200000.0,800000.0
+CT-2026-004,物流外包_对账,Smith Dawson Williams,850000.0,月度结算,David Liu,INV-2026-004,850000.0,850000.0
+CT-2026-005,芯片测试设备_对账,Hicks PLC,12000000.0,首付80%发货前20%,Eve Chen,INV-2026-005,12000000.0,9600000.0
+CT-2026-006,行政用品_对账,Moore-Kim,200000.0,验收付清,Frank Wu,INV-2026-006,200000.0,200000.0
+CT-2026-007,保安服务_对账,Ortega-Hoffman,360000.0,季度付,Grace Sun,INV-2026-007,360000.0,360000.0
+CT-2026-008,清洁外包_对账,Smith Dawson Williams,180000.0,月度付,Henry Zhao,INV-2026-008,180000.0,0.0
+CT-2026-009,印刷服务_对账,Bean Jones Benton,75000.0,验收付,Iris Yang,INV-2026-009,75000.0,75000.0
+CT-2026-010,法律咨询_对账,Moore-Kim,300000.0,季度付,Jack Tan,,,
