@@ -1,0 +1,10 @@
+name = "llm-ontology-simulator"
+main = "src/index.js"
+compatibility_date = "2023-01-01"
+
+[[routes]]
+pattern = "onto.aillm.net"
+custom_domain = true
+
+[vars]
+GEMINI_MODEL = "gemini-3.1-flash-lite"

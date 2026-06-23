@@ -1,0 +1,5 @@
+transaction_id,contract_ref,invoice_number,invoice_date,vendor_code,vendor_name,buyer_name,invoice_amount,paid_amount,payment_method,payor_entity,bank_reference,audit_flag
+TX-2026-9081,cont_001,inv_001,2026-06-01,V-SIGMA,SigmaCorp (供应商/销售商),AlphaCorp (采购商A),30000.0,30000.0,BANK_WIRE,AlphaCorp (采购商A),REF-89021832019,MATCHED
+TX-2026-9082,cont_001,inv_002,2026-06-02,V-SIGMA,SigmaCorp (供应商/销售商),AlphaCorp (采购商A),20000.0,15000.0,CASH,AlphaCorp (采购商A),REF-89021832020,UNDER_PAID
+TX-2026-9083,cont_002,inv_003,2026-06-03,V-SIGMA,SigmaCorp (供应商/销售商),BetaCorp (采购商B),110000.0,110000.0,BANK_WIRE,GammaCorp (神秘第三方付款方),REF-89021832021,THIRD_PARTY_MISMATCH
+TX-2026-9084,cont_002,inv_003,2026-06-03,V-SIGMA,SigmaCorp (供应商/销售商),BetaCorp (采购商B),110000.0,0.0,UNPAID,BetaCorp (采购商B),,OVER_BILLED

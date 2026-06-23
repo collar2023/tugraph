@@ -16,6 +16,18 @@
 
 ---
 
+## 1.5 五层本体架构 (Five-Layer Ontology Architecture)
+
+在“人工预建骨干表 (Ontology Seeding)”中，为了实现业务底线的严密闭环，我们统一采用**五层本体架构**进行基础定义与规范建模：
+
+1. **Entity (实体)**：核心业务对象（在 TuGraph 中映射为 Vertex Label，如 `Corp`、`Contract`），必须包含唯一主键。
+2. **Relation (关系)**：对象之间的逻辑连接（在 TuGraph 中映射为 Edge Label，如 `HAS_INVOICE`），须附带明确的方向与连接约束。
+3. **Constraint (约束)**：业务底线和不可触碰的物理/拓扑限制（在 TuGraph 中映射为 Schema 约束，如 `is_unique`、`is_notnull`，以及边约束 `constraints`）。
+4. **State (状态机)**：实体的生命周期阶段（在 TuGraph 中通常通过实体属性 `status: STRING` 或专用状态节点来表达，刻画实体的生命周期流转）。
+5. **Action (行动)**：触发状态转移的动作或 API（在 TuGraph 中体现为表示动作或事件的边，如 `sign_contract`、`MATCHED_INVOICE`，或由外部逻辑驱动的更新操作）。
+
+---
+
 ## 2. 脚本编写核心拆解
 
 ### 第一步：建立安全的高速连接
@@ -34,13 +46,12 @@ PASSWORD = "YOUR_TUGRAPH_PASSWORD"
 driver = GraphDatabase.driver(URI, auth=(USER, PASSWORD))
 ```
 
-### 第二步：定义强类型的“实体”（点表 Vertex）
-在 TuGraph 中建立实体骨干表时，必须严格指定**主键（Primary Key）**和**非空约束**。这是防止大模型抽取相同企业时发生“节点影分身”的物理保障。
+### 第二步：定义强类型的“实体”（点表 Vertex）与状态机（State）
+在 TuGraph 中建立实体骨干表时，必须严格指定**主键（Primary Key）**和**非空约束**，以防止大模型抽取相同实体时发生“节点影分身”。同时，我们把五层本体架构中的 **State (状态机)** 作为实体的强类型属性进行定义，为生命周期的流转奠定物理基础。
 
 ```python
 def create_core_vertex_labels(session):
     print("正在建立【Corp】企业骨干表...")
-    
     # 严格定义 Schema JSON
     corp_schema = {
         "label": "Corp",
@@ -62,24 +73,40 @@ def create_core_vertex_labels(session):
             }
         ]
     }
-    
     # 通过存储过程注入
     cmd = f"CALL db.createVertexLabelByJson('{json.dumps(corp_schema)}')"
     session.run(cmd)
     print("  -> Corp 表建立成功！")
+
+    print("正在建立【Contract】合同骨干表...")
+    # 定义包含状态机（State）属性的合同实体
+    contract_schema = {
+        "label": "Contract",
+        "primary": "contract_id",
+        "type": "VERTEX",
+        "properties": [
+            {"name": "contract_id", "type": "STRING", "is_primary": True, "is_unique": True, "is_notnull": True, "max_length": 100},
+            {"name": "name", "type": "STRING", "is_notnull": False},
+            {"name": "amount", "type": "DOUBLE", "is_notnull": False},
+            # 【State 状态机注入】：强行约束状态机的值在此流转，且不能为空
+            {"name": "status", "type": "STRING", "is_notnull": True}
+        ]
+    }
+    cmd = f"CALL db.createVertexLabelByJson('{json.dumps(contract_schema)}')"
+    session.run(cmd)
+    print("  -> Contract 表建立成功！")
 ```
 
-### 第三步：定义带“物理边界约束”的“关系”（边表 Edge）
-定义关系表是整个过程中**最关键的一环**。架构师必须通过 `constraints` 阵列死死限制住哪些实体可以连线。如果大模型企图将不符合逻辑的实体串联（例如 `[合同]-持股->[公司]`），底层引擎会直接拒绝并抛错。
+### 第三步：定义带“物理边界约束”的“关系”（边表 Edge）与行动（Action）
+定义关系表不仅是指定逻辑连线，更是在物理层定义**Relation (关系)**与**Constraint (约束)**。同时，我们通过定义特定的关系边和边属性，来体现**Action (行动)**——即驱动实体状态转移的动力因素（如合同签署、付款核销行为）。
 
 ```python
 def create_core_edge_labels(session):
     print("正在建立【hold_share】持股关系骨干表...")
-    
     hold_share_schema = {
         "label": "hold_share",
         "type": "EDGE",
-        # 【核心约束】: 规定起点和终点必须是下面这两种组合
+        # 【Constraint 核心拓扑约束】: 规定起点和终点必须是下面这两种组合
         "constraints": [
             ["Person", "Corp"],   # 自然人 持股 公司
             ["Corp", "Corp"]      # 公司 持股 公司
@@ -87,21 +114,50 @@ def create_core_edge_labels(session):
         "properties": [
             {
                 # 【算法护栏】: 强制规定持股比例必须是 DOUBLE 浮点数
-                # 逼迫大模型将 "百分之十" 转换为 0.10，确保下游 UBO 乘积运算不报错
                 "name": "share", 
                 "type": "DOUBLE", 
                 "is_notnull": False
             }
         ]
     }
-    
     cmd = f"CALL db.createEdgeLabelByJson('{json.dumps(hold_share_schema)}')"
     session.run(cmd)
     print("  -> hold_share 表建立成功！")
+
+    print("正在建立【MATCHED_INVOICE】核销行动骨干表...")
+    # 【Action 行动注入】：付款核销到发票，属于典型的触发状态机转移的业务行动
+    matched_invoice_schema = {
+        "label": "MATCHED_INVOICE",
+        "type": "EDGE",
+        "constraints": [
+            ["Payment", "Invoice"]  # 付款单核销发票
+        ],
+        "properties": [
+            {
+                # 记录该核销行动的具体核销金额
+                "name": "matched_amount", 
+                "type": "DOUBLE", 
+                "is_notnull": True
+            }
+        ]
+    }
+    cmd = f"CALL db.createEdgeLabelByJson('{json.dumps(matched_invoice_schema)}')"
+    session.run(cmd)
+    print("  -> MATCHED_INVOICE 表建立成功！")
 ```
 
-### 第四步：一键统筹与执行
-在 Python 的入口点中，将上述流程串联，确保在一个独立的 Database Session 中干净利落地完成初始化。
+### 第四步：定义“状态机”（State）设计规范
+状态机是对实体生命周期阶段的刚性约束。虽然 TuGraph 底层采用强 Schema 属性卡死（如顶点属性中的 `status: STRING`），但在应用逻辑中，我们建议通过明确的枚举及状态转移逻辑规范其表现：
+- **状态不为空**：所有带有生命周期特性的实体都必须显式包含 `status` 属性（非空约束）。
+- **生命周期清晰**：如合同的状态转移路径必须是单向且受控的：`Draft` ──> `Active` ──> `Completed` ──> `Terminated`。
+
+### 第五步：定义“行动”（Action）设计规范
+行动是触发状态机流转的引擎。在 Ontology Seeding 阶段，行动通过**动作关系边（Action Edge）**或**动作属性**进行固化：
+- **可追溯性**：行动边（如 `MATCHED_INVOICE`、`sign_contract`）通常必须携带执行时间、执行金额或执行主体信息。
+- **状态变迁关联**：系统在检测到 Action 边被创建或更新后，应自动触发底层状态机的转换（例如，当发票被 `MATCHED_INVOICE` 累计核销的金额等于发票总额时，发票状态由 `Unpaid` 转移为 `FullyPaid`）。
+
+### 第六步：一键统筹与执行
+在 Python 的入口点中，将上述五层本体（实体、关系、约束、状态机、行动）的初始化逻辑串联，在一个独立的 Database Session 中干净利落地完成注入。
 
 ```python
 if __name__ == "__main__":
@@ -109,9 +165,11 @@ if __name__ == "__main__":
     try:
         # 使用默认的 default 图空间
         with driver.session(database="default") as session:
+            # 1. 初始化实体 (Entity) 与 状态机属性 (State)
             create_core_vertex_labels(session)
+            # 2. 初始化关系 (Relation)、拓扑约束 (Constraint) 与 行动边 (Action)
             create_core_edge_labels(session)
-        print("=== 核心骨干本体初始化完毕！地基已打好！ ===")
+        print("=== 核心骨干五层本体初始化完毕！地基已打好！ ===")
     except Exception as e:
         print(f"初始化失败，请检查 TuGraph 状态或 Schema 是否已存在: {e}")
     finally:
@@ -127,28 +185,32 @@ if __name__ == "__main__":
 
 这种“**第 0 步法治兜底 + 第 1~5 步自治扩张**”的设计，正是本系统能够在商业场景中具备极高可用性的杀手锏。
 
-## 3.5 骨干表的三段式 (Three-Layer View)
+## 3.5 骨干表的五段式 (Five-Layer View)
 
-每个骨干表由 **3 段** 组成, 由内到外, 越内越不能动:
+每个骨干表由 **5 段** 组成，由内到外，越内越不能动。我们在原有的三段式（骨架、宪法、附言）基础上，扩展了状态机与行动两段：
 
-| 段 | 角色 | 在 `hold_share` 里的体现 | 谁能动 |
+| 段 | 角色 | 在图谱/业务里的体现 | 谁能动 |
 |---|---|---|---|
 | **骨架 (Schema)** | 实体 + 关系 label 名 | `Person`, `Corp`, `hold_share` 3 个 label | 架构师 (人工) |
 | **宪法 (Constraints)** | 边连接约束 + 主键约束 + 类型约束 | `Person→Corp` + `Corp→Corp`; `share: DOUBLE`; `corp_id` 唯一非空 | 架构师 (人工) |
 | **附言 (Properties)** | 可选属性, 描述性字段 | `name` (可空), `note`, `summary` | LLM 可补, 错了可清洗 |
+| **状态机 (State)** | 实体的生命周期阶段 | 实体的 `status` 属性（如 `Draft` / `Active` / `Completed`） | 架构师/业务定义 |
+| **行动 (Action)** | 触发状态转移的动作/动作边 | 带有核销/时间戳属性的边（如 `MATCHED_INVOICE` 核销行为） | 架构师/业务定义 |
 
-**附言是血肉, 错了可改; 骨架 + 宪法是底线, 推倒重来。**
+**附言是血肉, 错了可改; 骨架 + 宪法是底线, 推倒重来。状态机刻画生命周期阶段, 行动驱动状态转移。**
 
 **实操原则**:
 
-- 骨架和宪法**永远人工写**——LLM 只能在这两段内工作 (5 步 SOP 第 2-5 步)
+- 骨架、宪法、状态机和行动定义**永远人工写**——LLM 只能在这些约束限制内工作 (5 步 SOP 第 2-5 步)
 - 附言**让 LLM 抽**——抽错不致命, 进 HITL 兜底
 - 任何 schema 变更分清楚**改的是哪一段**:
-  - 改骨架 (新加 label) → 走 5 步 SOP, 人工审
-  - 改宪法 (改边约束/主键/类型) → **慎重**, 通常意味着业务逻辑变了
-  - 改附言 (新加可空字段) → 安全, 任意时点可做
+  - 改骨架 (新加 label) $\to$ 走 5 步 SOP, 人工审
+  - 改宪法 (改边约束/主键/类型) $\to$ **慎重**, 通常意味着业务逻辑变了
+  - 改附言 (新加可空字段) $\to$ 安全, 任意时点可做
+  - 改状态机 (新增状态/调整生命周期) $\to$ 属于业务主流程变更，需配合应用层调整
+  - 改行动 (新增动线边/调整核销规则) $\to$ 涉及状态转移逻辑的重构，需谨慎同步
 
-这个三段式与 §4 骨架/血肉的"深度哲学"是同一件事的两种表达——三段式偏"写代码时怎么分", 深度哲学偏"为什么这么分"。
+这个五段式与 §4 骨架/血肉的"深度哲学"是同一件事的两种表达——五段式偏"写代码时怎么分", 深度哲学偏"为什么这么分"。
 
 ---
 
@@ -176,48 +238,52 @@ if __name__ == "__main__":
 
 股权场景 (`hold_share`) 是"金融小切口"——演示穿透算法。**应付账款是"中小企最痛的小切口"**——每家公司都有对账、虚开、回款风险, 一听就懂。
 
-### 5.1 三段式拆分 (按 §3.5 视角)
+### 5.1 五段式拆分 (Five-Layer View)
 
-#### 骨架 (Schema)
-4 个 VERTEX + 6 条 EDGE, 完整的"合同→发票→付款"三方核对流:
+为了将应付账款场景对应到五层本体架构中，我们将核心要素拆分为骨架、宪法、附言、状态机和行动五段：
 
-| VERTEX | 主键 | 关键附言 | 业务角色 |
+#### 1. Entity (实体) 与 State (状态机)
+4 个 VERTEX 表，以及对应的生命周期状态：
+
+| VERTEX | 主键 | 关键状态 (State / 状态机) | 业务角色 |
 |---|---|---|---|
-| `Contract` | `contract_id` | `title`, `amount`, `payment_terms` | 采购合同 (业务源头) |
-| `Invoice`  | `invoice_id`  | `amount`, `issue_date`, `due_date` | 发票 (业务凭证) |
-| `Payment`  | `payment_id`  | `amount`, `pay_date`, `method` | 付款 (业务动作) |
-| `Corp`     | `corp_id`     | `name` | 供应商 / 客户 (业务主体) |
+| `Contract` | `contract_id` | `status`: `Draft` (草案) $\to$ `Active` (执行中) $\to$ `Completed` (已履约) | 采购合同 (业务源头) |
+| `Invoice`  | `invoice_id`  | `status`: `Unpaid` (未付款) $\to$ `PartiallyPaid` (部分付) $\to$ `FullyPaid` (已付清) | 发票 (业务凭证) |
+| `Payment`  | `payment_id`  | `status`: `Pending` (待处理) $\to$ `Cleared` (已结清) | 付款 (业务动作) |
+| `Corp`     | `corp_id`     | 无状态 (或 `status`: `Normal` / `Blacklist`) | 供应商 / 客户 (业务主体) |
 
-6 条 EDGE 构成完整业务链:
+#### 2. Relation (关系) 与 Action (行动)
+6 条 EDGE 构成完整业务链，其中包含特定的动作/行动触发：
 
-```
-HAS_INVOICE     Contract → Invoice        合同下挂发票 (一对多)
-ISSUED_BY       Invoice  → Corp           发票由谁开 (供应商 Corp)
-ISSUED_TO       Invoice  → Corp           发票开给谁 (客户 Corp)
-PAID_BY         Payment  → Corp           付款方 (客户 Corp)
-PAID_TO         Payment  → Corp           收款方 (供应商 Corp)
-MATCHED_INVOICE Payment  → Invoice        付款核销到发票 (一对多)
-```
+| EDGE Label | 起点 → 终点 | 业务角色与行动 (Action) 含义 |
+|---|---|---|
+| `HAS_INVOICE` | `Contract` → `Invoice` | 合同下挂发票 (一对多) |
+| `ISSUED_BY` | `Invoice` → `Corp` | 发票由谁开 (Action: 供应商开票行为) |
+| `ISSUED_TO` | `Invoice` → `Corp` | 发票开给谁 (客户接收行为) |
+| `PAID_BY` | `Payment` → `Corp` | 付款方 (客户付款行为) |
+| `PAID_TO` | `Payment` → `Corp` | 收款方 (供应商收款行为) |
+| `MATCHED_INVOICE` | `Payment` → `Invoice` | **核销行动 (Action)**: 付款核销到发票，携带 `matched_amount` 属性 |
 
-#### 宪法 (Constraints) — 6 条硬规则, 物理层强制
+#### 3. Constraint (约束) — 6 条硬规则, 物理层强制
 
 | 宪法规则 | 在哪 | 业务含义 |
 |---|---|---|
 | `Invoice→Corp` 单向 (`ISSUED_BY` / `ISSUED_TO`) | TuGraph `constraints` | 发票必须由供应商开、开给客户, 禁止乱连 |
 | `Payment→Corp` 单向 (`PAID_BY` / `PAID_TO`) | 同上 | 付款必须有付款方和收款方, 禁止 `Payment→Payment` |
 | `HAS_INVOICE` 单向 (`Contract→Invoice`) | 同上 | 合同才能挂发票, 禁止"无合同发票" |
-| `MATCHED_INVOICE` 单向 (`Payment→Invoice`) | 同上 | 付款必须核销到具体发票, 禁止"凭空付款" |
+| `MATCHED_INVOICE` 单向 (`Payment→Invoice`) | 同上 | 付款必须核销到具体发票, 属于有约束性行动 |
 | 主键业务码化 | `is_unique` + `is_notnull` | `invoice_id` / `payment_id` 来自客户财务系统, 不换自增 ID |
 | 边方向**不可逆** | `constraints` 单向 | 物理保证"付款不会从发票倒推到合同"——数据流向单一 |
+| 状态属性非空限制 | `is_notnull` | 实体点表的状态字段必须有初始值，不允许为空 |
 
-#### 附言 (Properties) — 可以错可改
+#### 4. 附言 (Properties) — 可以错可改
 
 - `Invoice.amount` — 发票金额
 - `Payment.amount` — 付款金额
 - `Contract.amount` — 合同金额
 - `Contract.payment_terms` — 付款条件 (LLM 抽错就进 HITL, 不致命)
 
-**附言错了没事**——清洗。**宪法错了就崩**——比如把 `MATCHED_INVOICE` 改成双向, 对账算法会死循环。
+**附言错了没事**——清洗。**宪法/约束错了就崩**——比如把 `MATCHED_INVOICE` 改成双向, 对账算法会死循环。
 
 ### 5.2 业务规则 (软宪法, 写在算法/Agent 层)
 
@@ -227,8 +293,8 @@ MATCHED_INVOICE Payment  → Invoice        付款核销到发票 (一对多)
 |---|---|---|
 | **三方对账** | `execute_cypher` 查 `Contract.amount = SUM(Invoice.amount) = SUM(PAID Payment.amount)` | 演示: "找出合同金额 ≠ 发票金额" |
 | **虚开检测** | 同一供应商 30 天内发票金额突增 5x | HITL 兜底 |
-| **重复付款** | 同一 `Invoice` 被 `MATCHED_INVOICE` 多次指向 | 必报警 |
-| **逾期未付** | `Invoice.due_date < now AND 未被 MATCHED_INVOICE` | 现金流预警 |
+| **核销超额** | 同一 `Invoice` 累计 `MATCHED_INVOICE.matched_amount` 超过 `Invoice.amount` | **状态/行动冲突**: 动作边总核销金额溢出 |
+| **逾期未付** | `Invoice.due_date < now AND Invoice.status != 'FullyPaid'` | **状态机触发**: 发票未付清且超期 |
 
 ### 5.3 跟 `hold_share` 的对比
 
@@ -247,33 +313,33 @@ MATCHED_INVOICE Payment  → Invoice        付款核销到发票 (一对多)
 
 ```
                   ┌──────────────┐
-                  │ Corp (供应商) │◀──── ISSUED_BY ─────┐
-                  └──────┬───────┘                       │
-                         │                          ┌────┴─────┐
-                    sign_contract                   │ Invoice  │
-                         │                          └────┬─────┘
-                         ▼                               │ HAS_INVOICE
-                  ┌──────────────┐ ◀───────────────────┘
-                  │  Contract    │   MATCHED_INVOICE
-                  │  (amount)    │         ▲
-                  └──────┬───────┘         │
-                         │            ┌────┴─────┐
-                         │            │ Payment  │
-                         │            └────┬─────┘
-                         │                 │
-                         ▼    PAID_BY / PAID_TO
-                  ┌──────────────┐
-                  │ Corp (客户)  │
+                  │ Corp (供应商) │◀──── ISSUED_BY (Action) ──┐
+                  └──────┬───────┘                            │
+                         │                               ┌────┴─────┐
+                   sign_contract (Action)                │ Invoice  │
+                         │                               │ (status) │
+                         ▼                               └────┬─────┘
+                  ┌──────────────┐                            │ HAS_INVOICE
+                  │  Contract    │◀───────────────────────────┘
+                  │  (status)    │    MATCHED_INVOICE (Action)
+                  └──────┬───────┘            ▲
+                         │                    │
+                         │               ┌────┴─────┐
+                         │               │ Payment  │
+                         │               │ (status) │
+                         ▼               └────┬─────┘
+                  ┌──────────────┐            │
+                  │  │ Corp (客户) │◀─────────┘ PAID_BY / PAID_TO
                   └──────────────┘
 ```
 
 #### 演示动线 (10 分钟)
 
-1. **第 1 分钟** — 白板画图 (4 个方块 + 6 条线)
-2. **第 2 分钟** — 讲"合同→发票→付款"三方对账业务含义
+1. **第 1 分钟** — 白板画图 (4 个方块 + 6 条线，标明 State 与 Action 关联)
+2. **第 2 分钟** — 讲"合同 (status) $\to$ 发票 (status) $\to$ 付款"三方状态流转与对账业务含义
 3. **第 3 分钟** — 跑 `execute_cypher` 查"找出对账不平的合同"
-4. **第 4 分钟** — 讲 6 条硬宪法 (边约束 + 方向不可逆)
-5. **第 5 分钟** — 讲 4 条软规则 + HITL 兜底 (虚开/重复/超额进待审核)
+4. **第 4 分钟** — 讲 6 条硬宪法与约束 (边约束 + 方向不可逆 + status 非空)
+5. **第 5 分钟** — 讲 4 条软规则 + 行动冲突 (核销超额) + HITL 兜底
 6. **第 6-10 分钟** — 客户问题
 
 ### 5.5 跟你其他骨干表的关系

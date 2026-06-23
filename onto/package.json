@@ -1,0 +1,13 @@
+{
+  "name": "llm-ontology-simulator",
+  "version": "1.0.0",
+  "description": "LLM Ontology Modeling Simulator on Cloudflare Workers",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}
