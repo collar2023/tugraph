@@ -16,15 +16,17 @@
 
 ---
 
-## 1.5 五层本体架构 (Five-Layer Ontology Architecture)
+## 1.5 四层本体与动力学架构 (Four-Layer Ontology & Kinetics Architecture)
 
-在“人工预建骨干表 (Ontology Seeding)”中，为了实现业务底线的严密闭环，我们统一采用**五层本体架构**进行基础定义与规范建模：
+在“人工预建骨干表 (Ontology Seeding)”中，基于 Palantir Foundry 的最佳设计哲学，我们统一采用由“语义层（静态基座）”与“动力学层（动作与规则）”组成的**四层架构**进行规范建模：
 
-1. **Entity (实体)**：核心业务对象（在 TuGraph 中映射为 Vertex Label，如 `Corp`、`Contract`），必须包含唯一主键。
-2. **Relation (关系)**：对象之间的逻辑连接（在 TuGraph 中映射为 Edge Label，如 `HAS_INVOICE`），须附带明确的方向与连接约束。
-3. **Constraint (约束)**：业务底线和不可触碰的物理/拓扑限制（在 TuGraph 中映射为 Schema 约束，如 `is_unique`、`is_notnull`，以及边约束 `constraints`）。
-4. **State (状态机)**：实体的生命周期阶段（在 TuGraph 中通常通过实体属性 `status: STRING` 或专用状态节点来表达，刻画实体的生命周期流转）。
-5. **Action (行动)**：触发状态转移的动作或 API（在 TuGraph 中体现为表示动作或事件的边，如 `sign_contract`、`MATCHED_INVOICE`，或由外部逻辑驱动的更新操作）。
+### 一、 语义层（Semantic Elements）：数字孪生的静态基座
+1. **Object Type (对象类型)**：现实世界中物理或概念实体的数字化定义（如：企业 `Corp`、合同 `Contract`，在 TuGraph 中映射为 Vertex Label）。对象承载各种属性（Properties），其中包含表示生命周期流转的“状态属性（Status Property，如 `status`）”。
+2. **Link Type (链接类型)**：对象之间的结构化关联（如 `HAS_INVOICE`，在 TuGraph 中映射为 Edge Label），规定了知识图谱的拓扑结构与方向。
+
+### 二、 动力学层（Kinetic Elements）：让数据动起来的齿轮
+3. **Action Type (行动类型)**：允许用户或系统对对象和关系进行修改的受控事务（在 TuGraph 中体现为表示动作或事件的边，如 `sign_contract`、`MATCHED_INVOICE`）。状态机的流转内嵌于 Action 及其引发的 Object 状态属性变更中，无须作为独立层级。
+4. **Rules & Constraints (规则与约束)**：附着在 Action 或 Object 上的业务逻辑与安全边界。包含在数据库物理层死死卡在 Action 之上的**验证规则（Validation Rules，如边约束 `constraints`、主键唯一性 `is_unique`）**，以及运行期动态校验的业务计算函数，定义了状态跃迁的安全红线。
 
 ---
 
@@ -47,7 +49,7 @@ driver = GraphDatabase.driver(URI, auth=(USER, PASSWORD))
 ```
 
 ### 第二步：定义强类型的“实体”（点表 Vertex）与状态机（State）
-在 TuGraph 中建立实体骨干表时，必须严格指定**主键（Primary Key）**和**非空约束**，以防止大模型抽取相同实体时发生“节点影分身”。同时，我们把五层本体架构中的 **State (状态机)** 作为实体的强类型属性进行定义，为生命周期的流转奠定物理基础。
+在 TuGraph 中建立实体骨干表时，必须严格指定**主键（Primary Key）**和**非空约束**，以防止大模型抽取相同实体时发生“节点影分身”。同时，我们把状态属性（Status Property）作为对象类型的强类型属性进行定义，为生命周期的流转奠定物理基础。
 
 ```python
 def create_core_vertex_labels(session):
@@ -157,7 +159,7 @@ def create_core_edge_labels(session):
 - **状态变迁关联**：系统在检测到 Action 边被创建或更新后，应自动触发底层状态机的转换（例如，当发票被 `MATCHED_INVOICE` 累计核销的金额等于发票总额时，发票状态由 `Unpaid` 转移为 `FullyPaid`）。
 
 ### 第六步：一键统筹与执行
-在 Python 的入口点中，将上述五层本体（实体、关系、约束、状态机、行动）的初始化逻辑串联，在一个独立的 Database Session 中干净利落地完成注入。
+在 Python 的入口点中，将上述四层核心要素（对象、链接、规则约束、业务行动）的初始化逻辑串联，在一个独立的 Database Session 中干净利落地完成注入。
 
 ```python
 if __name__ == "__main__":
@@ -169,7 +171,7 @@ if __name__ == "__main__":
             create_core_vertex_labels(session)
             # 2. 初始化关系 (Relation)、拓扑约束 (Constraint) 与 行动边 (Action)
             create_core_edge_labels(session)
-        print("=== 核心骨干五层本体初始化完毕！地基已打好！ ===")
+        print("=== 核心骨干四层本体与动力学初始化完毕！地基已打好！ ===")
     except Exception as e:
         print(f"初始化失败，请检查 TuGraph 状态或 Schema 是否已存在: {e}")
     finally:
@@ -185,32 +187,29 @@ if __name__ == "__main__":
 
 这种“**第 0 步法治兜底 + 第 1~5 步自治扩张**”的设计，正是本系统能够在商业场景中具备极高可用性的杀手锏。
 
-## 3.5 骨干表的五段式 (Five-Layer View)
+## 3.5 骨干表的四段式 (Four-part Seeding View)
 
-每个骨干表由 **5 段** 组成，由内到外，越内越不能动。我们在原有的三段式（骨架、宪法、附言）基础上，扩展了状态机与行动两段：
+每个骨干表由 **4 段** 组成，由内到外，越内越不能动：
 
 | 段 | 角色 | 在图谱/业务里的体现 | 谁能动 |
 |---|---|---|---|
-| **骨架 (Schema)** | 实体 + 关系 label 名 | `Person`, `Corp`, `hold_share` 3 个 label | 架构师 (人工) |
-| **宪法 (Constraints)** | 边连接约束 + 主键约束 + 类型约束 | `Person→Corp` + `Corp→Corp`; `share: DOUBLE`; `corp_id` 唯一非空 | 架构师 (人工) |
-| **附言 (Properties)** | 可选属性, 描述性字段 | `name` (可空), `note`, `summary` | LLM 可补, 错了可清洗 |
-| **状态机 (State)** | 实体的生命周期阶段 | 实体的 `status` 属性（如 `Draft` / `Active` / `Completed`） | 架构师/业务定义 |
-| **行动 (Action)** | 触发状态转移的动作/动作边 | 带有核销/时间戳属性的边（如 `MATCHED_INVOICE` 核销行为） | 架构师/业务定义 |
+| **骨架 (Schema)** | 对象类型与链接类型的定义 | `Person`, `Corp`, `hold_share` 的 Label 声明 | 架构师 (人工) |
+| **宪法 (Rules & Constraints)** | 物理边连接约束 + 关键主键/类型约束 | `Person→Corp` 拓扑方向；`corp_id` 唯一非空 | 架构师 (人工) |
+| **属性 (Properties & Status)** | 业务属性、可空字段及当前状态 | `name` (描述字段), `status` (当前状态属性) | LLM 抽取/Action 变更 |
+| **行动 (Actions)** | 动力学动作与状态跃迁边 | 带有动作/时间戳属性的边（如 `MATCHED_INVOICE` 核销行为） | 架构师 (人工) |
 
-**附言是血肉, 错了可改; 骨架 + 宪法是底线, 推倒重来。状态机刻画生命周期阶段, 行动驱动状态转移。**
+**属性是血肉，错了可清洗或由 Action 修改；骨架 + 宪法是底线，推倒重来。行动驱动状态的流转。**
 
 **实操原则**:
+- 骨架、宪法和行动定义**永远人工手写**——LLM 只能在这些约束限制内工作。
+- 属性**让 LLM 抽取或由 Action 变更**——属性抽错不致命，可进入人机协同 (HITL) 兜底排查。
+- 任何 Schema 变更要分清改的是哪一段：
+  - 改骨架 (新加 label) ➔ 走审批流程，人工审计。
+  - 改宪法 (修改边约束或主键类型) ➔ **极度慎重**，意味着底层风控底线发生变动。
+  - 改属性 (新加可空属性) ➔ 安全，可随时进行扩展。
+  - 改行动 (调整状态转移/核销规则) ➔ 涉及动作边的重构，需谨慎同步。
 
-- 骨架、宪法、状态机和行动定义**永远人工写**——LLM 只能在这些约束限制内工作 (5 步 SOP 第 2-5 步)
-- 附言**让 LLM 抽**——抽错不致命, 进 HITL 兜底
-- 任何 schema 变更分清楚**改的是哪一段**:
-  - 改骨架 (新加 label) $\to$ 走 5 步 SOP, 人工审
-  - 改宪法 (改边约束/主键/类型) $\to$ **慎重**, 通常意味着业务逻辑变了
-  - 改附言 (新加可空字段) $\to$ 安全, 任意时点可做
-  - 改状态机 (新增状态/调整生命周期) $\to$ 属于业务主流程变更，需配合应用层调整
-  - 改行动 (新增动线边/调整核销规则) $\to$ 涉及状态转移逻辑的重构，需谨慎同步
-
-这个五段式与 §4 骨架/血肉的"深度哲学"是同一件事的两种表达——五段式偏"写代码时怎么分", 深度哲学偏"为什么这么分"。
+这个四段式与 §4 骨架/血肉的"深度哲学"是同一件事的两种表达——四段式偏"写代码时怎么分", 深度哲学偏"为什么这么分"。
 
 ---
 
@@ -238,35 +237,35 @@ if __name__ == "__main__":
 
 股权场景 (`hold_share`) 是"金融小切口"——演示穿透算法。**应付账款是"中小企最痛的小切口"**——每家公司都有对账、虚开、回款风险, 一听就懂。
 
-### 5.1 五段式拆分 (Five-Layer View)
+### 5.1 四段式拆分 (Four-Layer View)
 
-为了将应付账款场景对应到五层本体架构中，我们将核心要素拆分为骨架、宪法、附言、状态机和行动五段：
+为了将应付账款场景对应到四层本体与动力学架构中，我们将核心要素拆分为骨架、宪法、属性和行动四段：
 
-#### 1. Entity (实体) 与 State (状态机)
+#### 1. Object Type (对象与状态属性)
 4 个 VERTEX 表，以及对应的生命周期状态：
 
-| VERTEX | 主键 | 关键状态 (State / 状态机) | 业务角色 |
+| VERTEX | 主键 | 状态属性 (Status Property) | 业务角色 |
 |---|---|---|---|
-| `Contract` | `contract_id` | `status`: `Draft` (草案) $\to$ `Active` (执行中) $\to$ `Completed` (已履约) | 采购合同 (业务源头) |
-| `Invoice`  | `invoice_id`  | `status`: `Unpaid` (未付款) $\to$ `PartiallyPaid` (部分付) $\to$ `FullyPaid` (已付清) | 发票 (业务凭证) |
-| `Payment`  | `payment_id`  | `status`: `Pending` (待处理) $\to$ `Cleared` (已结清) | 付款 (业务动作) |
+| `Contract` | `contract_id` | `status`: `Draft` (草案) ➔ `Active` (执行中) ➔ `Completed` (已履约) | 采购合同 (业务源头) |
+| `Invoice`  | `invoice_id`  | `status`: `Unpaid` (未付款) ➔ `PartiallyPaid` (部分付) ➔ `FullyPaid` (已付清) | 发票 (业务凭证) |
+| `Payment`  | `payment_id`  | `status`: `Pending` (待处理) ➔ `Cleared` (已结清) | 付款 (业务动作) |
 | `Corp`     | `corp_id`     | 无状态 (或 `status`: `Normal` / `Blacklist`) | 供应商 / 客户 (业务主体) |
 
-#### 2. Relation (关系) 与 Action (行动)
+#### 2. Link Type (链接关系) 与 Action (行动)
 6 条 EDGE 构成完整业务链，其中包含特定的动作/行动触发：
 
 | EDGE Label | 起点 → 终点 | 业务角色与行动 (Action) 含义 |
 |---|---|---|
-| `HAS_INVOICE` | `Contract` → `Invoice` | 合同下挂发票 (一对多) |
-| `ISSUED_BY` | `Invoice` → `Corp` | 发票由谁开 (Action: 供应商开票行为) |
-| `ISSUED_TO` | `Invoice` → `Corp` | 发票开给谁 (客户接收行为) |
-| `PAID_BY` | `Payment` → `Corp` | 付款方 (客户付款行为) |
-| `PAID_TO` | `Payment` → `Corp` | 收款方 (供应商收款行为) |
-| `MATCHED_INVOICE` | `Payment` → `Invoice` | **核销行动 (Action)**: 付款核销到发票，携带 `matched_amount` 属性 |
+| `HAS_INVOICE` | `Contract` ➔ `Invoice` | 合同下挂发票 (一对多) |
+| `ISSUED_BY` | `Invoice` ➔ `Corp` | 发票由谁开 (Action: 供应商开票行为) |
+| `ISSUED_TO` | `Invoice` ➔ `Corp` | 发票开给谁 (客户接收行为) |
+| `PAID_BY` | `Payment` ➔ `Corp` | 付款方 (客户付款行为) |
+| `PAID_TO` | `Payment` ➔ `Corp` | 收款方 (供应商收款行为) |
+| `MATCHED_INVOICE` | `Payment` ➔ `Invoice` | **核销行动 (Action)**: 付款核销到发票，携带 `matched_amount` 属性 |
 
-#### 3. Constraint (约束) — 6 条硬规则, 物理层强制
+#### 3. Rules & Constraints (规则与约束) — 物理层验证规则
 
-| 宪法规则 | 在哪 | 业务含义 |
+| 规则与约束 | 在哪 | 业务含义 |
 |---|---|---|
 | `Invoice→Corp` 单向 (`ISSUED_BY` / `ISSUED_TO`) | TuGraph `constraints` | 发票必须由供应商开、开给客户, 禁止乱连 |
 | `Payment→Corp` 单向 (`PAID_BY` / `PAID_TO`) | 同上 | 付款必须有付款方和收款方, 禁止 `Payment→Payment` |
@@ -276,14 +275,14 @@ if __name__ == "__main__":
 | 边方向**不可逆** | `constraints` 单向 | 物理保证"付款不会从发票倒推到合同"——数据流向单一 |
 | 状态属性非空限制 | `is_notnull` | 实体点表的状态字段必须有初始值，不允许为空 |
 
-#### 4. 附言 (Properties) — 可以错可改
+#### 4. 属性 (Properties) — 业务属性(LLM抽取/可改)
 
 - `Invoice.amount` — 发票金额
 - `Payment.amount` — 付款金额
 - `Contract.amount` — 合同金额
 - `Contract.payment_terms` — 付款条件 (LLM 抽错就进 HITL, 不致命)
 
-**附言错了没事**——清洗。**宪法/约束错了就崩**——比如把 `MATCHED_INVOICE` 改成双向, 对账算法会死循环。
+**属性错了没事**——清洗。**宪法/约束规则错了就崩**——比如把 `MATCHED_INVOICE` 改成双向, 对账算法会死循环。
 
 ### 5.2 业务规则 (软宪法, 写在算法/Agent 层)
 
@@ -394,7 +393,7 @@ graph TD
 - **骨架**: 实体圆圈 + 关系带箭头连线
 - **宪法**: 连线上的边约束 (起点→终点) + 边上的关键属性类型 (如 `share: DOUBLE`)
 
-**附言 (name, summary, note) 不画**——LLM 自己从客户 Excel 抽。
+**属性 (name, summary, note) 不画**——LLM 自己从客户 Excel 抽。
 
 ### 6.2 LLM 干什么 (机器做)
 
@@ -457,14 +456,14 @@ scripts/auto_onboard.py     ← 列画像体检, 不替架构师造宪法 (§4)
    ↓
 跑 seed_*.py 灌骨干
    ↓
-5 步 SOP 第 1-5 步          ← LLM 在骨架+宪法内自进化 (附言抽取)
+5 步 SOP 第 1-5 步          ← LLM 在骨架+宪法内自进化 (属性抽取)
 ```
 
 **人工每次出场的位置**: 画图 + review + 5 步 SOP 第 2 步 LLM 决策的兜底。**其余全是机器干**——这是 Ontology as a Service 的终局。
 
 ### 6.6 与本节其他章节的呼应
 
-- §3.4 三段式 (骨架 / 宪法 / 附言) → §6.1 架构师画"前 2 段"
+- §3.4 三段式 (骨架 / 宪法 / 属性) → §6.1 架构师画"前 2 段"
 - §4 骨架/血肉深度哲学 → §6.4 工具的边界声明
 - §5 三元化分工 (LLM 抽事实 / 人工定规则) → §6.2 LLM 翻译 / 架构师画图
 

@@ -1,24 +1,21 @@
-const SYSTEM_PROMPT = `你是一名世界级的前线部署工程师（FDE，Forward Deployed Engineer），精通 Palantir Ontology（本体）架构设计与企业经营级建模。
-你的任务是将用户输入的一句话或一段业务描述，深度解构并映射为“十一层思维逻辑”模型（包括五层本体架构、五层治理与运营架构、以及一层顶层抽象）。
+const SYSTEM_PROMPT = `你是一名世界级的前线部署工程师（FDE，Forward Deployed Engineer），精通 Palantir Ontology（本体）与动力学架构设计。
+你的任务是将用户输入的一句话或一段业务描述，深度解构并映射为“十层思维逻辑”模型（包括四层本体与动力学架构、五层治理与运营架构、以及一层顶层抽象）。
 
 你必须输出一个合法的 JSON 对象，不包含任何 Markdown 格式包裹（直接输出 JSON 文本，不要用 \`\`\`json 格式）。确保 JSON 的所有 Key 和 Value 符合以下结构：
 
 {
   "ontology": {
-    "entities": [
-      { "id": "唯一英文ID", "name": "中文名称", "type": "中文类型(如物理资产/主体角色/企业机构等)", "status": "中文当前状态" }
+    "objects": [
+      { "id": "唯一英文ID", "name": "中文名称", "type": "中文类型(如物理资产/人员主体/合规文件/企业机构等)", "status": "中文当前状态属性" }
     ],
-    "relations": [
-      { "source": "源点ID", "target": "终点ID", "label": "中文关系名称(如符合条件/划转资金)", "properties": { "name": "中文属性名", "type": "中文属性类型" } }
+    "links": [
+      { "source": "源点ID", "target": "终点ID", "label": "中文链接名称(如满足申请条件/划转资金)", "properties": { "name": "中文属性名", "type": "中文属性类型" } }
     ],
-    "constraints": [
-      { "name": "中文约束名", "rule": "中文物理/底线约束详细规则说明" }
-    ],
-    "states": [
-      { "entity_id": "关联实体ID", "current": "中文当前状态", "stages": ["中文状态阶段1", "中文状态阶段2", "中文状态阶段3"] }
+    "rules": [
+      { "name": "中文验证规则与约束名", "rule": "中文物理限额/动作拦截校验规则说明" }
     ],
     "actions": [
-      { "name": "中文行动/API名称", "description": "中文行动描述", "trigger": "中文触发条件", "result": "中文状态机转移结果" }
+      { "name": "中文行动名称", "description": "中文行动描述", "trigger": "中文触发条件", "result": "中文状态属性变更结果" }
     ]
   },
   "governance": {
@@ -43,8 +40,8 @@ const SYSTEM_PROMPT = `你是一名世界级的前线部署工程师（FDE，For
 
 请注意：
 1. 必须根据用户选择的“行业背景”进行针对性的专业建模（例如房地产行业要扣紧工程进度、预售证和资金监管；金融审计要扣紧三方对账和虚开；反欺诈要扣紧设备、手机号 and 团伙关联等）。
-2. Constraint 必须是不可逾越的底线逻辑规则。
-3. 特别重要：本系统是展示给中国企业家/CEO查看的经营决策治理模拟盘。因此，除了实体 id 和关联的 source/target id 允许使用英文大写字母标识（如 BUILDING_12、PRE_SALE_PERMIT）以方便计算外，JSON 对象中的所有其他中文属性、中文名称、关系 label、实体类型 type、行动 action、状态 state 等必须一律且尽量使用中文输出，不得出现多余的英文标识。`;
+2. Rules 必须是不可逾越的底线逻辑验证规则。
+3. 特别重要：本系统是展示给中国企业家/CEO查看的经营决策治理模拟盘。因此，除了对象 id 和关联的 source/target id 允许使用英文大写字母标识（如 BUILDING_12、PRE_SALE_PERMIT）以方便计算外，JSON 对象中的所有其他属性、名称、关系 label、对象类型 type、行动 action、状态 status 等必须一律且尽量使用中文输出，不得出现多余的英文标识。`;
 
 const HTML_CONTENT = `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -237,11 +234,11 @@ const HTML_CONTENT = `<!DOCTYPE html>
           </div>
         </div>
 
-        <!-- Q4: 11-Layer Ontology & Governance -->
+        <!-- Q4: 10-Layer Ontology & Governance -->
         <div class="glass p-5 rounded-xl min-h-[320px] flex flex-col">
-          <h2 class="text-base font-semibold text-emerald-400 mb-3">五段十一层本体建模抽象图景 (11-Layer Ontology & Governance)</h2>
+          <h2 class="text-base font-semibold text-emerald-400 mb-3">四段十层本体建模抽象图景 (10-Layer Ontology & Governance)</h2>
           <div class="flex-1 overflow-auto bg-slate-950 p-4 rounded-lg border border-slate-900 max-h-[280px] text-xs leading-relaxed space-y-4" id="reportViewer">
-            <div class="text-slate-500 italic">等待分析并生成十一层决策模型...</div>
+            <div class="text-slate-500 italic">等待分析并生成十层决策模型...</div>
           </div>
         </div>
       </div>
@@ -299,7 +296,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
     clearBtn.addEventListener("click", () => {
       inputText.value = "";
       clearUploadedFile();
-      reportViewer.innerHTML = '<div class="text-slate-500 italic">等待分析并生成十一层决策模型...</div>';
+      reportViewer.innerHTML = '<div class="text-slate-500 italic">等待分析并生成十层决策模型...</div>';
       summaryText.textContent = "请在上方输入语句并点击运行，大模型将自动生成其本体的顶层抽象概括。";
       stakeholdersList.innerHTML = '<li class="text-slate-600 italic">暂无数据</li>';
       policiesList.innerHTML = '<li class="text-slate-600 italic">暂无数据</li>';
@@ -492,8 +489,8 @@ const HTML_CONTENT = `<!DOCTYPE html>
       const centerX = activeWidth / 2;
       const centerY = activeHeight / 2;
 
-      const entities = ontology.entities || [];
-      activeRelations = ontology.relations || [];
+      const entities = ontology.objects || [];
+      activeRelations = ontology.links || [];
 
       if (entities.length === 0) return;
 
@@ -664,34 +661,33 @@ const HTML_CONTENT = `<!DOCTYPE html>
         const gov = result.governance || {};
 
         const nodesMap = {};
-        (ontology.entities || []).forEach(e => {
-          nodesMap[e.id] = e;
+        (ontology.objects || []).forEach(o => {
+          nodesMap[o.id] = o;
         });
 
         let reportHtml = '<div class="space-y-4">' +
           '<div>' +
-            '<h3 class="text-sm font-bold text-cyan-400 border-b border-slate-800 pb-1 mb-2">【层级一：定义世界 (Ontology)】</h3>' +
+            '<h3 class="text-sm font-bold text-cyan-400 border-b border-slate-800 pb-1 mb-2">【层级一：静态本体与动力学 (Ontology & Kinetics)】</h3>' +
             '<ul class="space-y-2 text-gray-300">' +
-              '<li><strong class="text-cyan-300 font-semibold">1. Entity (实体):</strong> ' + (ontology.entities || []).map(e => e.name + ' (' + e.id + ')').join(', ') + '</li>' +
-              '<li><strong class="text-cyan-300 font-semibold">2. Relation (关系):</strong> ' + (ontology.relations || []).map(r => (nodesMap[r.source]?.name || r.source) + ' -(' + r.label + ')-> ' + (nodesMap[r.target]?.name || r.target)).join(', ') + '</li>' +
-              '<li><strong class="text-cyan-300 font-semibold">3. Constraint (规则或约束):</strong> ' + (ontology.constraints || []).map(c => (c.name || '规则') + ': ' + (c.rule || c.description)).join('; ') + '</li>' +
-              '<li><strong class="text-cyan-300 font-semibold">4. State (状态机):</strong> ' + (ontology.states || []).map(s => (nodesMap[s.entity_id || s.entity]?.name || s.entity_id || s.entity || '状态') + ': [' + s.stages.join(' -> ') + ']').join('; ') + '</li>' +
-              '<li><strong class="text-cyan-300 font-semibold">5. Action (行动):</strong> ' + (ontology.actions || []).map(a => a.name + '(' + a.description + '): 由 ' + a.trigger + ' 触发 -> ' + a.result).join('; ') + '</li>' +
+              '<li><strong class="text-cyan-300 font-semibold">1. Object (对象类型):</strong> ' + (ontology.objects || []).map(o => o.name + ' (' + o.id + ' • ' + (o.status || '无状态') + ')').join(', ') + '</li>' +
+              '<li><strong class="text-cyan-300 font-semibold">2. Link (关系链接):</strong> ' + (ontology.links || []).map(l => (nodesMap[l.source]?.name || l.source) + ' -(' + l.label + ')-> ' + (nodesMap[l.target]?.name || l.target)).join(', ') + '</li>' +
+              '<li><strong class="text-cyan-300 font-semibold">3. Rule (验证规则):</strong> ' + (ontology.rules || []).map(r => (r.name || '规则') + ': ' + (r.rule || r.description)).join('; ') + '</li>' +
+              '<li><strong class="text-cyan-300 font-semibold">4. Action (行动事务):</strong> ' + (ontology.actions || []).map(a => a.name + '(' + a.description + '): ' + a.trigger + ' ➔ ' + a.result).join('; ') + '</li>' +
             '</ul>' +
           '</div>' +
           '<div class="mt-4">' +
             '<h3 class="text-sm font-bold text-violet-400 border-b border-slate-800 pb-1 mb-2">【层级二：治理与运营 (Governance)】</h3>' +
             '<ul class="space-y-2 text-gray-300">' +
-              '<li><strong class="text-violet-300 font-semibold">6. Stakeholder (利益相关方):</strong> ' + (gov.stakeholders || []).map(s => s.role + ' (' + s.responsibility + ')').join(', ') + '</li>' +
-              '<li><strong class="text-violet-300 font-semibold">7. Policy (企业策略):</strong> ' + (gov.policies || []).map(p => p.name + ': ' + p.description).join('; ') + '</li>' +
-              '<li><strong class="text-violet-300 font-semibold">8. Metric (指标):</strong> ' + (gov.metrics || []).map(m => m.name + ' (' + m.value + ')').join(', ') + '</li>' +
-              '<li><strong class="text-violet-300 font-semibold">9. Risk (风险):</strong> ' + (gov.risks || []).map(r => r.name + ': ' + r.impact).join('; ') + '</li>' +
-              '<li><strong class="text-violet-300 font-semibold">10. Automation (自动化):</strong> ' + (gov.automation || []).map(a => '【' + a.process + '】 ' + (a.trigger_rule || '')).join('; ') + '</li>' +
+              '<li><strong class="text-violet-300 font-semibold">5. Stakeholder (利益相关方):</strong> ' + (gov.stakeholders || []).map(s => s.role + ' (' + s.responsibility + ')').join(', ') + '</li>' +
+              '<li><strong class="text-violet-300 font-semibold">6. Policy (企业策略):</strong> ' + (gov.policies || []).map(p => p.name + ': ' + p.description).join('; ') + '</li>' +
+              '<li><strong class="text-violet-300 font-semibold">7. Metric (运营指标):</strong> ' + (gov.metrics || []).map(m => m.name + ' (' + m.value + ')').join(', ') + '</li>' +
+              '<li><strong class="text-violet-300 font-semibold">8. Risk (监控风险):</strong> ' + (gov.risks || []).map(r => r.name + ': ' + r.impact).join('; ') + '</li>' +
+              '<li><strong class="text-violet-300 font-semibold">9. Automation (自动触发):</strong> ' + (gov.automation || []).map(a => '【' + a.process + '】 ' + (a.trigger_rule || '')).join('; ') + '</li>' +
             '</ul>' +
           '</div>' +
           '<div class="mt-4">' +
             '<h3 class="text-sm font-bold text-emerald-400 border-b border-slate-800 pb-1 mb-2">【层级三：顶层抽象】</h3>' +
-            '<p class="text-gray-300 italic"><strong class="text-emerald-300 font-semibold">11. Ontology Summary:</strong> ' + (result.summary || '无') + '</p>' +
+            '<p class="text-gray-300 italic"><strong class="text-emerald-300 font-semibold">10. Summary (顶层总结):</strong> ' + (result.summary || '无') + '</p>' +
           '</div>' +
         '</div>';
 
