@@ -372,7 +372,79 @@ setTaskStatus(env, taskId, status, extra)
 
 ---
 
-## 🛡️ 8. 治理闭环落地现状 (Governance Loop Status, 2026-06-20 更新)
+## ⚡ 8. 动力学 Action 执行架构设计：平衡与落地的终极拼图 (Kinetic Action Execution Architecture)
+
+在“对象（Object）”和“链接（Link）”定义了静态的语义世界，“规则（Rule）”设定了安全红线后，**“行动（Action）”就是驱动整个关系网流动、促成业务世界状态跃迁的“动力学引擎”**。
+
+在 `fder.188001.xyz` 业财合规系统的未来演进中，Action 的落地不再局限于单一节点的属性修改，而是要向下保证图谱的事务一致性，向上提供大模型 Agent 可理解的控制手柄，向外连接真实的物理系统（如 ERP、支付网关）。因此，本系统采用 **“定义在图谱、执行在 MCP、异步在边缘”的“三层协同动力学架构”**。
+
+### 8.1 三层协同架构图示
+
+```mermaid
+graph TD
+    Agent[LLM Agent 决策层] -->|1. 读取元数据了解可用动作| Meta[(Ontology Schema: ActionType)]
+    Agent -->|2. 调用动作接口| MCP[MCP 执行层: mcp_server.py]
+    
+    subgraph 本地图事务
+        MCP -->|3a. 执行硬性 Rules 校验| Rules{Rules/Constraints}
+        MCP -->|3b. 写入 Action 边 & 变更 Status| Graph[(TuGraph 图库)]
+        MCP -->|3c. 生成审计节点| AuditLog[(AuditLog 顶点/边)]
+    end
+    
+    MCP -->|4. 投递异步任务| CFQueue[Cloudflare Queue 消息队列]
+    
+    subgraph 边缘与外部自愈层
+        CFQueue -->|5. 消费任务并保证重试| CFWorker[Cloudflare Ingest Worker]
+        CFWorker -->|6a. 调用外部系统| External[外部 ERP / 银行网关 / 消息通知]
+        CFWorker -->|6b. 实时推送更新| DO[Durable Objects WebSocket]
+        DO -->|7. 刷新 Dashboard| Frontend[fder.188001.xyz 浏览器端]
+    end
+```
+
+### 8.2 核心分层设计规范
+
+#### 第一层：定义层——“声明式”本体元数据 (Ontology Metadata)
+在本体定义阶段，每一个 Action 都被声明为图谱中的一个元数据标签。这让 Agent 在“睁开眼”时就能通过查询图谱，以纯语义的形式获知它在这个世界拥有的能力，而不需要硬编码接口。
+
+* **存储形式**：以 `ActionType` 顶点标签存在 TuGraph 中，或者以 JSON-Schema 格式挂在前端/Agent 初始化配置中。
+* **声明内容**：
+  * **Inputs (入参约束)**：声明该动作需要的参数。例如 `MATCHED_INVOICE` 需要 `payment_id`, `invoice_id`, `matched_amount`。
+  * **Pre-conditions (前置条件)**：规定动作执行前，关联实体的必要状态。如：被核销的 `Invoice` 状态必须为 `Unpaid` 或 `PartiallyPaid`。
+  * **Effects (状态变更预期)**：当动作执行完毕后，目标对象属性的相应变迁（如 `status` 的流转）。
+
+#### 第二层：执行层——“事务性”MCP Tool 接口 (FastMCP Gatekeeper)
+大模型 Agent 绝对不允许拥有直接编写任意 Cypher 语句修改节点状态的权限。大模型的所有“破坏性动作（写操作）”必须通过调用特定的 **MCP Tool** 代理执行。
+
+* **实现位置**：`procurement-audit-mcp/mcp_server.py`
+* **执行步骤与守则**：
+  1. **参数拦截与硬校验**：接收大模型的入参，动态查库校验前置条件是否满足（比如当前合同是否已终止）。
+  2. **图事务封装 (Atomic Transaction)**：在同一个 Cypher 图事务中同时完成以下变更，确保原子性：
+     * **新建动作边**：创建带有时间戳和操作员信息的 Action 边（如 `MATCHED_INVOICE`）。
+     * **状态变迁（State Transition）**：根据核销金额自动累加计算，触发受控的状态跃迁（如将 `Invoice.status` 变更为 `FullyPaid`）。
+     * **写入审计日志（Audit Log）**：在图谱中创建 `AuditLog` 顶点，记录 `[大模型/操作人ID] -> 执行了 [ActionName] -> 产生了 [结果变化]`。这是后续系统对账、回滚和防篡改的重要物理底座。
+  3. **写操作幂等**：利用 `mcp_writes.jsonl` 中的幂等键对写请求进行去重，规避大模型因网络延迟导致的重复调用。
+
+#### 第三层：异步/外部流转层——“自愈式”边缘队列与外部网关 (Cloudflare Workers)
+很多 Action 在修改了本地图谱后，必须伴随着外部真实世界的物理动作（如扣款、发送邮件、同步 ERP）。此类外部 IO 极易发生超时和网络波动，严禁将其写入 MCP 的同步等待线程中。
+
+* **实现位置**：`ingest-worker` 与 Cloudflare 边缘环境。
+* **协作逻辑**：
+  1. **任务削峰与解耦**：MCP Server 在完成本地图事务后，立即生成任务 ID 并投递至 Cloudflare Queue，向大模型 Agent 返回“动作已提交，处理中”。
+  2. **指数退避重试（Backoff Retry）**：Cloudflare Worker 消费 Queue 中的任务，调用外部三方支付网关或 ERP API。如果三方系统临时宕机，利用 CF Queue 的重试策略进行多次指数退避重试，保证“外部物理扣款”等 Action 的最终一致性。
+  3. **状态回推（Durable Objects Push）**：一旦外部 Action 执行成功或被人工审核覆盖，Worker 会修改图谱状态，并通过 Durable Objects 提供的 WebSocket 连接，以小于 100ms 的延迟将最新状态属性（如 `Cleared`）推送到 `fder.188001.xyz` 前端界面，完成整个合规动力学闭环。
+
+---
+
+### 8.3 商业落地的平衡哲学：防腐隔离与人机协同
+
+1. **防腐隔离 (Anti-Corruption Layer)**：
+   本设计将大模型的幻觉圈禁在“只读/受控写”的 MCP 栅栏内。大模型只能以“语义化的决策”去按按钮，而真正的物理操作（比如打款、修改合同）由安全验证 Python 事务和边缘 Worker 完成。
+2. **长尾妥协与 HITL（人工介入）的无缝衔接**：
+   如果大模型通过 MCP 触发某个 Action 时，动态 Rules 校验失败（例如发票疑似虚开、对账金额不对齐），系统不会抛出异常导致进程中断，而是将该 Action 挂载到 `PendingReview`（待审）任务链中。这让业务流程不至于在第一步被硬规则掐死，而是优雅地降级为“人机协同模式”，等待人工 review 批准或人工修改属性。
+
+---
+
+## 🛡️ 9. 治理闭环落地现状 (Governance Loop Status, 2026-06-20 更新)
 
 > **TL;DR**: 6.1-6.3 描述的 HITL 5% 兜底 + 极简协同台全部落到代码。**2026-06-20 新增**：异步前端全链路（R2+Queue+KV+Callback+DO WebSocket 实时推送）已在 `fder.188001.xyz` 线上验证。本节是当前治理能力的"白盒清单"——客户审计员/合规自查时直接对照本节确认能力边界。
 
@@ -461,7 +533,7 @@ setTaskStatus(env, taskId, status, extra)
 
 ---
 
-## 📊 9. 架构鲁棒性与企业级泛化研判 (Architecture Robustness & Enterprise Generalization)
+## 📊 10. 架构鲁棒性与企业级泛化研判 (Architecture Robustness & Enterprise Generalization)
 
 > **TL;DR**: 针对开发/测试阶段容易产生“场景过拟合”，而企业实际生产环境千变万化的特点，本节对当前系统在真实企业级环境中的可用性、缺陷风险及升级路径进行客观评估，确保系统架构具备高度的容灾能力与扩展性。
 

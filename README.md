@@ -10,7 +10,7 @@
 
 ## 0. 项目状态快照 (2026-06-20 异步前端实时推送闭环已跨过) 📊
 
-> **TL;DR**：3 个业务 agent + 1 个 MCP server (12 tools) + AuditLog + HITL 全跑通。**2026-06-20 重大里程碑**：异步前端全链路闭环，并引入 Cloudflare **Durable Objects** 实时 WebSocket 推送，卸载轮询开销，推送延迟 < 100ms。测试上传 2 个文件均在 10s 内 `completed`。详见白皮书第 7、8 节。
+> **TL;DR**：3 个业务 agent + 1 个 MCP server (12 tools) + AuditLog + HITL 全跑通。**2026-06-20 重大里程碑**：异步前端全链路闭环，并引入 Cloudflare **Durable Objects** 实时 WebSocket 推送，卸载轮询开销，推送延迟 < 100ms。测试上传 2 个文件均在 10s 内 `completed`。详见白皮书第 7、8、9 节。
 
 ### 0.1 当前能力清单
 
