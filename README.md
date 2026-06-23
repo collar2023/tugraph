@@ -198,3 +198,29 @@ python3 /home/ubuntu/tugraph/algorithm-lab/demo_shareholding.py
 本方案从原始数据提取、Schema 建模、大模型意图提取到图谱/向量双驱的完整实施规范，请查阅专版 SOP 文档：
 👉 [极简直连主方案 GraphRAG 架构 SOP 实施手册](file:///home/ubuntu/.gemini/antigravity-cli/brain/ad049765-97c7-444a-902c-bb086dda27fb/lean_graphrag_tugraph_sop.md)
 
+---
+
+## 7. 架构总结与落地心得：解耦与不贬值的数字资产 💡
+
+> **“流水的管道，铁打的本体。”** —— 平台落地核心洞察
+
+在 `Lean-GraphRAG` 架构的建设与验证过程中，我们提炼出了一个极具商业与技术普适性的核心架构哲学：**将核心“数字孪生资产（Ontology）”与底层的“计算/通讯管道（Infrastructure）”彻底解耦**。
+
+在面向不同国家（如中国出海 vs. 境内私有化）、不同合规级别（如民企 SaaS vs. 国央企信创）的交付场景时，除了核心的本体建模资产外，**所有的通道和算力基础设施均可平替（Plug & Play）**：
+
+### 7.1 解耦的三层资产视图
+
+| 层级 | 核心资产内容 (Sovereign Assets) | 物理体现 | 资产属性 |
+| :--- | :--- | :--- | :--- |
+| **语义与动力学底座** | ① 骨干拓扑（Schema）<br>② 安全红线（Rules）<br>③ 动力学动作（Actions） | TuGraph 顶点/边声明、JSON 描述字典 | **绝对不贬值的核心资产**<br>定义了企业的“因果关系网”，跨平台/大模型完全可移植。 |
+| **通讯与状态管道** | 异步队列解耦、实时推送、连接状态维护 | Cloudflare Queue / Durable Objects | **可平替的计算管道**<br>出海/全球版采用 CF Serverless；国内版或私有化可平替为 `TDMQ / RabbitMQ / Redis Stream + Dapr`。 |
+| **推理与语义感知** | 结构化数据提取、意图研判、流程微调 | MiniMax / Gemini / Qwen / DeepSeek | **可即插即用的执行引擎**<br>Agent 通过语义标准接口（MCP）操作数据，大模型可以根据合规要求随时切换。 |
+
+### 7.2 基础设施无关性（Infrastructure Independence）
+
+基于此设计，`fder.188001.xyz` 实现了企业级 AI 架构的**“上帝搬家”**自由：
+1. **智能体无痛迁移**：由于大模型不直连数据库，而是通过 MCP 工具包（FastMCP）进行语义交互，更换底层大模型不需要重写任何数据库交互代码。
+2. **多云与信创平替**：同一套本体逻辑，既能在云端以零成本极速部署（Cloudflare 生态），也能在境内安全信创环境下打包为 Docker 容器，运行于国产 CPU（华为鲲鹏）和操作系统（麒麟 OS）之上。
+
+**真正的数字孪生，不是建立在特定云厂商之上的烟囱应用，而是将企业物理规律和因果链代码化、网络化的本体引擎。**
+
