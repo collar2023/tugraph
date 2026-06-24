@@ -105,13 +105,13 @@ const HTML_CONTENT = `<!DOCTYPE html>
       <div class="flex items-center gap-3">
         <label for="industry" class="text-sm text-gray-400">行业场景:</label>
         <select id="industry" class="bg-slate-900 border border-slate-700 text-gray-200 px-3 py-1.5 rounded-lg focus:outline-none focus:border-cyan-400 text-sm">
-          <option value="Real Estate">房地产与空间资产 (Real Estate)</option>
-          <option value="High-End Manufacturing">高端制造与工业物联网 (Manufacturing)</option>
-          <option value="Healthcare">医疗健康与临床合规 (Healthcare)</option>
-          <option value="Finance & Audit">金融审计与反洗钱 (Finance)</option>
-          <option value="Logistics & Supply Chain">智慧物流与供应链 (Logistics)</option>
-          <option value="Sports Education">体育教育与青少年培训 (Sports Education)</option>
-          <option value="AI Governance & Software Engineering" selected>企业AI数字化治理与软件工程 (AI Governance & SE)</option>
+          <option value="Real Estate">房地产与空间资产</option>
+          <option value="High-End Manufacturing">高端制造与工业物联网</option>
+          <option value="Healthcare">医疗健康与临床合规</option>
+          <option value="Finance & Audit">金融审计与反洗钱</option>
+          <option value="Logistics & Supply Chain">智慧物流与供应链</option>
+          <option value="Sports Education">体育教育与青少年培训</option>
+          <option value="AI Governance & Software Engineering" selected>企业AI数字化治理与软件工程</option>
         </select>
       </div>
     </header>
