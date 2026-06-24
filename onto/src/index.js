@@ -1,3 +1,5 @@
+const GENERATE_DIFFICULTY = "medium"; // 范例生成难度：'low' / 'medium' / 'high'
+
 const SYSTEM_PROMPT = `你是一名世界级的前线部署工程师（FDE，Forward Deployed Engineer），精通 Palantir Ontology（本体）与动力学架构设计。
 你的任务是将用户输入的一句话或一段业务描述，深度解构并映射为“十层思维逻辑”模型（包括四层本体与动力学架构、五层治理与运营架构、以及一层顶层抽象）。
 
@@ -109,6 +111,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
           <option value="Finance & Audit">金融审计与反洗钱 (Finance)</option>
           <option value="Logistics & Supply Chain">智慧物流与供应链 (Logistics)</option>
           <option value="Sports Education">体育教育与青少年培训 (Sports Education)</option>
+          <option value="AI Governance & Software Engineering" selected>企业AI数字化治理与软件工程 (AI Governance & SE)</option>
         </select>
       </div>
     </header>
@@ -124,7 +127,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
             <h2 class="text-base font-semibold text-cyan-400">数据源与业务文本输入 (Q1)</h2>
             <div class="text-xs text-gray-500">自然语言或导入多模态资产</div>
           </div>
-          <textarea id="inputText" class="flex-1 w-full min-h-[100px] bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm focus:outline-none focus:border-cyan-500 text-gray-100 placeholder-slate-600 resize-y" placeholder="例如：12#楼已经主体建到第十层了,可以拿预售证回笼资金了。"></textarea>
+          <textarea id="inputText" class="flex-1 w-full min-h-[100px] bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm focus:outline-none focus:border-cyan-500 text-gray-100 placeholder-slate-600 resize-y" placeholder="例如：系统检测到小王提交的PR中包含了未审计的第三方大模型 API 调用，触发了企业AI数字化合规准则中的数据出境安全红线，该PR的自动合并动作被拦截，并指派首席合规官进行人工审计。"></textarea>
           
           <!-- File Upload Zone -->
           <div id="dropzone" class="border border-dashed border-slate-700 hover:border-cyan-500/50 rounded-lg p-3 text-center cursor-pointer transition-all bg-slate-950/40 relative">
@@ -148,10 +151,15 @@ const HTML_CONTENT = `<!DOCTYPE html>
             </div>
           </div>
 
-          <div class="flex gap-3 justify-end items-center">
+          <div class="flex gap-3 justify-between items-center w-full">
+            <div>
+              <button id="injectExampleBtn" type="button" class="px-3 py-2 bg-slate-850 hover:bg-slate-800 border border-slate-700 hover:border-cyan-500/50 text-cyan-400 font-semibold rounded-lg text-xs transition-all active:scale-95">
+                随机生成范例
+              </button>
+            </div>
             <div class="flex gap-2">
-              <button id="clearBtn" class="px-4 py-2 border border-slate-700 hover:bg-slate-800 transition-colors text-xs font-semibold rounded-lg">清空</button>
-              <button id="analyzeBtn" class="px-5 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-slate-950 font-bold rounded-lg text-xs shadow-lg transition-all duration-300 transform active:scale-95">开始多模态抽取</button>
+              <button id="clearBtn" type="button" class="px-4 py-2 border border-slate-700 hover:bg-slate-800 transition-colors text-xs font-semibold rounded-lg">清空</button>
+              <button id="analyzeBtn" type="button" class="px-5 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-slate-950 font-bold rounded-lg text-xs shadow-lg transition-all duration-300 transform active:scale-95">开始多模态抽取</button>
             </div>
           </div>
         </div>
@@ -261,13 +269,15 @@ const HTML_CONTENT = `<!DOCTYPE html>
       "Healthcare": "患者张三有严重的青霉素过敏史，但在系统下达处方Action时却配了阿莫西林胶囊，触发临床安全红线警报并予以拦截。",
       "Finance & Audit": "采购合同2026-A109由买方付了全款，但供应商却开具了不同金额的发票，怀疑有虚开发票或账目不符风险。",
       "Logistics & Supply Chain": "冷链集装箱CONT_029的温度在过去2小时内持续飙升至12度以上，需要紧急指派调度员拦截，并将生鲜货物进行转移避险。",
-      "Sports Education": "青少年篮球班今天排课时，指派的张教练其红十字救护员证书已过期，触发排课合规性审查警报，排课动作被自动拦截并自动指派合格的替补教练。"
+      "Sports Education": "青少年篮球班今天排课时，指派的张教练其红十字救护员证书已过期，触发排课合规性审查警报，排课动作被自动拦截并自动指派合格的替补教练。",
+      "AI Governance & Software Engineering": "系统检测到小王提交的PR中包含了未审计的第三方大模型 API 调用，触发了企业AI数字化合规准则中的数据出境安全红线，该PR的自动合并动作被拦截，并指派首席合规官进行人工审计。"
     };
 
     const industrySelector = document.getElementById("industry");
     const inputText = document.getElementById("inputText");
     const clearBtn = document.getElementById("clearBtn");
     const analyzeBtn = document.getElementById("analyzeBtn");
+    const injectExampleBtn = document.getElementById("injectExampleBtn");
     const reportViewer = document.getElementById("reportViewer");
     const summaryText = document.getElementById("summaryText");
     const stakeholdersList = document.getElementById("stakeholdersList");
@@ -291,6 +301,48 @@ const HTML_CONTENT = `<!DOCTYPE html>
 
     industrySelector.addEventListener("change", () => {
       inputText.placeholder = "例如：" + industryExamples[industrySelector.value];
+    });
+
+    injectExampleBtn.addEventListener("click", async () => {
+      const industry = industrySelector.value;
+      const originalText = injectExampleBtn.textContent;
+      injectExampleBtn.textContent = "生成中...";
+      injectExampleBtn.disabled = true;
+      inputText.value = "正在由大模型动态构建逼真的业务场景...";
+
+      try {
+        const response = await fetch("/api/generate-example", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ industry })
+        });
+        const result = await response.json();
+        if (result.error) {
+          alert("生成失败: " + result.error);
+          inputText.value = "";
+        } else {
+          let fullText = result.text || "";
+          inputText.value = "";
+          let idx = 0;
+          const speed = 15;
+          function typeWriter() {
+            if (idx < fullText.length) {
+              inputText.value += fullText.charAt(idx);
+              idx++;
+              setTimeout(typeWriter, speed);
+            }
+          }
+          typeWriter();
+        }
+      } catch (err) {
+        alert("请求发生错误: " + err);
+        inputText.value = "";
+      } finally {
+        injectExampleBtn.textContent = originalText;
+        injectExampleBtn.disabled = false;
+      }
     });
 
     clearBtn.addEventListener("click", () => {
@@ -743,7 +795,72 @@ export default {
       });
     }
 
-    // 2. POST /api/analyze: Call Gemini API
+    // 2. POST /api/generate-example: Generate dynamic business scenario examples
+    if (request.method === "POST" && url.pathname === "/api/generate-example") {
+      try {
+        const body = await request.json();
+        const industry = body.industry || "General";
+        const apiKey = env.GEMINI_API_KEY;
+        if (!apiKey) {
+          return new Response(
+            JSON.stringify({ error: "未配置 GEMINI_API_KEY" }),
+            { status: 400, headers: { "Content-Type": "application/json" } }
+          );
+        }
+
+        const model = env.GEMINI_MODEL || "gemini-3.1-flash-lite";
+        const targetUrl = `https://ai-gateway-403802525344.asia-east1.run.app/gemini/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+        const prompt = `请为行业场景“${industry}”从企业 CEO / 决策者的经营和因果推演视角，随机生成一段高质量的、逼真的业务话术描述或系统警报事件文本。
+
+难度级别要求为：${GENERATE_DIFFICULTY} （初级对应单步物理状态判定；中级对应多维度状态约束与行动触发；高级对应复杂的因果传导链条、风险熔断自愈决策与多系统协同）。
+
+要求：
+1. 语言必须极其专业、真实，直击该行业的经营痛点与管理词汇（如数据防出境安全、模型权限漂移、三方API风险等）。
+2. 直接输出生成的业务文本内容，严禁包含任何 Markdown 格式包裹（不要用 \`\`\` 格式）、不要包含任何“好的，以下是为您生成的...”等前导或后置客套话。
+3. 文本字数严格控制在 80 到 200 字之间。`;
+
+        const response = await fetch(targetUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Proxy-Auth": env.PROXY_KEY || "121218679"
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: "user",
+                parts: [{ text: prompt }]
+              }
+            ],
+            generationConfig: {
+              temperature: 0.8
+            }
+          })
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          return new Response(
+            JSON.stringify({ error: `API 调用失败: ${response.status} - ${errText}` }),
+            { status: 500, headers: { "Content-Type": "application/json" } }
+          );
+        }
+
+        const resData = await response.json();
+        const contentText = resData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        return new Response(JSON.stringify({ text: contentText.trim() }), {
+          headers: { "Content-Type": "application/json" }
+        });
+      } catch (err) {
+        return new Response(
+          JSON.stringify({ error: `服务器内部错误: ${err.message}` }),
+          { status: 500, headers: { "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // 3. POST /api/analyze: Call Gemini API
     if (request.method === "POST" && url.pathname === "/api/analyze") {
       try {
         const body = await request.json();
