@@ -809,7 +809,7 @@ export default {
         }
 
         const model = env.GEMINI_MODEL || "gemini-3.1-flash-lite";
-        const targetUrl = `https://ai-gateway-403802525344.asia-east1.run.app/gemini/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const targetUrl = `https://ai-gateway-403802525344.asia-east1.run.app/gemini/v1beta/models/${model}:generateContent`;
 
         const prompt = `请为行业场景“${industry}”从企业 CEO 或运营高管的经营视角，随机生成一段高质量的、逼真的业务口头陈述、会议纪要或经营分析事件描述。
 
@@ -825,7 +825,8 @@ export default {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "X-Proxy-Auth": env.PROXY_KEY || ""
+            "X-Proxy-Auth": env.PROXY_KEY || "",
+            "x-goog-api-key": apiKey
           },
           body: JSON.stringify({
             contents: [
@@ -889,7 +890,7 @@ export default {
         }
 
         // Route requests through the Taiwan proxy gateway to bypass region restrictions
-        const targetUrl = `https://ai-gateway-403802525344.asia-east1.run.app/gemini/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const targetUrl = `https://ai-gateway-403802525344.asia-east1.run.app/gemini/v1beta/models/${model}:generateContent`;
 
         const parts = [
           { text: prompt }
@@ -908,7 +909,8 @@ export default {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "X-Proxy-Auth": env.PROXY_KEY || ""
+            "X-Proxy-Auth": env.PROXY_KEY || "",
+            "x-goog-api-key": apiKey
           },
           body: JSON.stringify({
             contents: [
